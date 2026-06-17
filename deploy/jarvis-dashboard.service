@@ -1,0 +1,19 @@
+[Unit]
+Description=Jarvis Dashboard (Next.js)
+After=network.target
+
+[Service]
+Type=simple
+# Adjust User and paths to match the jarvis server.
+User=dan
+WorkingDirectory=/opt/jarvis-dashboard
+Environment=NODE_ENV=production
+Environment=PORT=4500
+# Put real secrets in /opt/jarvis-dashboard/.env and load them:
+EnvironmentFile=/opt/jarvis-dashboard/.env
+ExecStart=/usr/bin/npm start
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

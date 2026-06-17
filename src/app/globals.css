@@ -1,0 +1,128 @@
+@import "tailwindcss";
+
+:root {
+  /* CGA / Norton Commander / Turbo Vision palette */
+  --dos-bg: #0000a8; /* desktop blue */
+  --dos-bg-deep: #00007a;
+  --dos-panel: #0808b4; /* panel fill, a touch lighter than desktop */
+  --dos-cyan: #2bd3d3; /* dim cyan borders */
+  --dos-cyan-bright: #5fffff; /* bright cyan accents */
+  --dos-white: #e6e6ff;
+  --dos-bright: #ffffff;
+  --dos-gray: #9a9ad8;
+  --dos-yellow: #ffff55;
+  --dos-green: #5bff5b;
+  --dos-red: #ff5b5b;
+  --dos-amber: #ffb454;
+}
+
+@theme inline {
+  --color-dos-bg: var(--dos-bg);
+  --color-dos-panel: var(--dos-panel);
+  --color-dos-cyan: var(--dos-cyan);
+  --color-dos-white: var(--dos-white);
+}
+
+html,
+body {
+  background:
+    radial-gradient(120% 100% at 50% 0%, var(--dos-bg) 0%, var(--dos-bg-deep) 100%);
+  background-attachment: fixed;
+  color: var(--dos-white);
+  font-family: "Cascadia Code", "JetBrains Mono", "IBM Plex Mono", "SFMono-Regular",
+    Consolas, "Courier New", monospace;
+  font-variant-ligatures: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* Phosphor glow on text */
+.glow {
+  text-shadow: 0 0 1px currentColor, 0 0 6px rgba(95, 255, 255, 0.25);
+}
+
+/* Double-line box-drawing border, the DOS TUI signature */
+.dos-box {
+  border: 3px double var(--dos-cyan);
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.04), rgba(0, 0, 0, 0.08));
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35) inset, 0 6px 22px rgba(0, 0, 0, 0.35);
+}
+
+/* Inverse-video bar (selected/title rows): cyan fill, blue text */
+.dos-bar {
+  background: var(--dos-cyan-bright);
+  color: var(--dos-bg-deep);
+}
+
+/* CRT overlay: scanlines + subtle vignette, non-interactive */
+.crt::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 0, 0, 0) 0px,
+    rgba(0, 0, 0, 0) 2px,
+    rgba(0, 0, 0, 0.16) 3px,
+    rgba(0, 0, 0, 0) 4px
+  );
+  mix-blend-mode: multiply;
+}
+.crt::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 61;
+  pointer-events: none;
+  background: radial-gradient(120% 110% at 50% 50%, transparent 60%, rgba(0, 0, 0, 0.45) 100%);
+}
+
+/* Blinking block cursor */
+@keyframes dos-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.cursor {
+  display: inline-block;
+  width: 0.6em;
+  height: 1.05em;
+  margin-left: 0.15em;
+  vertical-align: -0.18em;
+  background: var(--dos-cyan-bright);
+  animation: dos-blink 1.1s steps(1) infinite;
+}
+
+/* Smooth collapse */
+.collapse-anim {
+  overflow: hidden;
+  transition: grid-template-rows 0.18s ease;
+  display: grid;
+  grid-template-rows: 1fr;
+}
+.collapse-anim.closed {
+  grid-template-rows: 0fr;
+}
+.collapse-anim > div {
+  min-height: 0;
+}
+
+/* Inputs */
+.dos-input {
+  background: var(--dos-bg-deep);
+  border: 2px solid var(--dos-cyan);
+  color: var(--dos-white);
+  outline: none;
+}
+.dos-input:focus {
+  border-color: var(--dos-cyan-bright);
+  box-shadow: 0 0 0 1px var(--dos-cyan-bright);
+}
+
+::selection {
+  background: var(--dos-cyan-bright);
+  color: var(--dos-bg-deep);
+}

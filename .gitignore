@@ -1,0 +1,14 @@
+.DS_Store
+/node_modules
+/.next
+/out
+/build
+*.tsbuildinfo
+next-env.d.ts
+
+# Local data + secrets
+/data/*.db
+/data/*.db-*
+.env
+.env.local
+.env*.local
