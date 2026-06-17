@@ -1,8 +1,27 @@
 # Deploying to the jarvis server
 
+The server (`dan@100.102.159.57`, `/opt/jarvis-dashboard`) is a **git checkout of
+`main`**, authenticated with a read-only SSH deploy key (`~/.ssh/jarvis-dashboard-deploy`,
+used via the `github-jarvis-dashboard` host alias in `~/.ssh/config`). `.env`,
+`data/`, `node_modules/`, and `.next/` are gitignored and live only on the server.
+
+## Updating (the normal case)
+
+Push to `main`, then run the deploy script:
+
+```bash
+ssh dan@100.102.159.57 /opt/jarvis-dashboard/deploy/update.sh
+```
+
+It does `git pull --ff-only && npm ci && npm run build && systemctl restart jarvis-dashboard`.
+
+---
+
+## First-time / from-scratch setup (already done once)
+
 These steps assume an SSH-accessible Linux server with Node 20+ installed.
 
-## 1. Copy the project (without node_modules)
+### 1. Copy the project (without node_modules)
 
 ```bash
 rsync -av --exclude node_modules --exclude .next --exclude data \
