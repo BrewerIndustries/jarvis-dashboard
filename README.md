@@ -137,6 +137,10 @@ If `JARVIS_TOKEN` is unset, writes are open (only do that on a trusted network).
 - Hover an item and click **✕** to delete.
 - Bottom-right **🔑** sets the token this browser uses for status changes/deletes.
 - Top bar: search + "hide done".
+- **Environment banner:** set `JARVIS_ENV` (e.g. `dev`) and a non-production deploy
+  shows an amber **`⚠ <ENV> ENVIRONMENT — NOT PRODUCTION`** strip pinned to the top
+  and an `[ENV]` prefix in the browser-tab title. Leave it unset on production so no
+  banner shows.
 
 ## Deploy to the jarvis server
 

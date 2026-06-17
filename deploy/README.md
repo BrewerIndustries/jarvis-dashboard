@@ -13,6 +13,12 @@ Each has its own `.env` (separate `JARVIS_TOKEN`) and isolated SQLite DB.
 `.env`, `data/`, `node_modules/`, and `.next/` are gitignored and live only on
 the server.
 
+**Environment banner:** DEV's `.env` must include `JARVIS_ENV=dev` so the UI shows
+its amber "DEV ENVIRONMENT — NOT PRODUCTION" strip and `[DEV]` tab title. **MAIN must
+leave `JARVIS_ENV` unset** (or `main`) so production shows no banner. The value is read
+at request time, so editing `.env` + `systemctl restart <service>` is enough — no rebuild
+needed for the banner alone.
+
 ## Workflow
 
 Work on `dev`, deploy to DEV, and **promote to MAIN only on explicit say-so**:

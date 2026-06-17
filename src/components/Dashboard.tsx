@@ -88,7 +88,7 @@ function buildPrefix(ancestorsLast: boolean[]): string {
 
 // --- main --------------------------------------------------------------------
 
-export default function Dashboard() {
+export default function Dashboard({ env }: { env?: string | null }) {
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
@@ -213,7 +213,9 @@ export default function Dashboard() {
   const handlers = { toggle, mutate, remove, cycleStatus, cycleArea, collapsed };
 
   return (
-    <div className="crt min-h-screen px-3 py-4 sm:px-6 sm:py-6">
+    <div className="crt min-h-screen">
+      {env && <EnvBanner env={env} />}
+      <div className="px-3 py-4 sm:px-6 sm:py-6">
       <div className="mx-auto max-w-[1600px]">
         <Header stats={stats} query={query} setQuery={setQuery} hideDone={hideDone} setHideDone={setHideDone} />
 
@@ -237,8 +239,23 @@ export default function Dashboard() {
 
         <StatusBar stats={stats} now={now} />
       </div>
+      </div>
 
       <TokenBar token={token} onSave={saveToken} />
+    </div>
+  );
+}
+
+// --- environment banner (DEV / non-prod) -------------------------------------
+
+function EnvBanner({ env }: { env: string }) {
+  return (
+    <div className="dos-env-banner sticky top-0 z-[65] flex items-center justify-center gap-2 px-3 py-1 text-center text-sm font-bold uppercase tracking-[0.25em]">
+      <span aria-hidden>▓▒░</span>
+      <span>
+        ⚠ {env} environment <span className="opacity-70">— not production</span>
+      </span>
+      <span aria-hidden>░▒▓</span>
     </div>
   );
 }

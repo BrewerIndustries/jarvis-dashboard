@@ -21,6 +21,11 @@ SSH host alias `github-jarvis-dashboard`) with its **own `.env` (separate `JARVI
 and isolated SQLite DB**. `.env`, `data/`, `node_modules/`, `.next/` are gitignored —
 server-only.
 
+DEV's `.env` sets **`JARVIS_ENV=dev`**, which renders an amber "DEV ENVIRONMENT — NOT
+PRODUCTION" banner at the top + `[DEV]` tab title. MAIN leaves it unset → no banner.
+It's read server-side per request (the page is `force-dynamic`), so `.env` edit + service
+restart suffices.
+
 ## Workflow  ⚠️ READ THIS
 
 - **Work on `dev`.** Push to `dev` and deploy DEV freely.
@@ -64,7 +69,8 @@ changes, use the preview tooling (a `.claude/launch.json` is included).
 - `src/lib/auth.ts` — token check for writes
 - `src/app/api/items/route.ts` — `GET` (list) / `POST` (create, token-gated)
 - `src/app/api/items/[id]/route.ts` — `PATCH` / `DELETE` (token-gated, delete cascades)
-- `src/components/Dashboard.tsx` — the whole UI (tree, columns, collapse, inline edit, DOS theme)
+- `src/app/page.tsx` — server entry; resolves `JARVIS_ENV` and passes it to the UI + tab title
+- `src/components/Dashboard.tsx` — the whole UI (tree, columns, collapse, inline edit, DOS theme, env banner)
 - `src/app/globals.css` — DOS/CRT theme (CGA palette, scanlines, double-line boxes)
 - `scripts/jarvis-send.sh` — CLI push helper (reads `~/.config/jarvis/jarvis.env`)
 - `mcp/jarvis-mcp.js` — local MCP server for the Claude desktop app (`add_to_jarvis`, `list_jarvis`)

@@ -126,3 +126,13 @@ body {
   background: var(--dos-cyan-bright);
   color: var(--dos-bg-deep);
 }
+
+/* Non-production environment warning strip (DEV / staging) — amber on deep blue,
+   the DOS "caution" combo, deliberately unmissable at the top of the page. */
+.dos-env-banner {
+  background: var(--dos-amber);
+  color: var(--dos-bg-deep);
+  border-bottom: 2px solid var(--dos-bg-deep);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.4);
+  text-shadow: none;
+}
