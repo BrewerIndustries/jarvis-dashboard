@@ -1,19 +1,33 @@
 # Deploying to the jarvis server
 
-The server (`dan@100.102.159.57`, `/opt/jarvis-dashboard`) is a **git checkout of
-`main`**, authenticated with a read-only SSH deploy key (`~/.ssh/jarvis-dashboard-deploy`,
-used via the `github-jarvis-dashboard` host alias in `~/.ssh/config`). `.env`,
-`data/`, `node_modules/`, and `.next/` are gitignored and live only on the server.
+Two environments live on the jarvis server (`dan@100.102.159.57`), each a **git
+checkout** authenticated with the read-only deploy key (`~/.ssh/jarvis-dashboard-deploy`,
+via the `github-jarvis-dashboard` host alias in `~/.ssh/config`):
 
-## Updating (the normal case)
+| Env  | Branch | Path                       | Port | Service                  |
+| ---- | ------ | -------------------------- | ---- | ------------------------ |
+| MAIN | `main` | `/opt/jarvis-dashboard`     | 4500 | `jarvis-dashboard`       |
+| DEV  | `dev`  | `/opt/jarvis-dashboard-dev` | 4510 | `jarvis-dashboard-dev`   |
 
-Push to `main`, then run the deploy script:
+Each has its own `.env` (separate `JARVIS_TOKEN`) and isolated SQLite DB.
+`.env`, `data/`, `node_modules/`, and `.next/` are gitignored and live only on
+the server.
+
+## Workflow
+
+Work on `dev`, deploy to DEV, and **promote to MAIN only on explicit say-so**:
 
 ```bash
-ssh dan@100.102.159.57 /opt/jarvis-dashboard/deploy/update.sh
+# develop locally on the dev branch, then:
+git push origin dev
+ssh dan@100.102.159.57 /opt/jarvis-dashboard-dev/deploy/update-dev.sh   # → DEV (:4510)
+
+# once approved, promote dev → main and deploy prod:
+git checkout main && git merge --ff-only dev && git push origin main
+ssh dan@100.102.159.57 /opt/jarvis-dashboard/deploy/update.sh           # → MAIN (:4500)
 ```
 
-It does `git pull --ff-only && npm ci && npm run build && systemctl restart jarvis-dashboard`.
+Each `update*.sh` does `git pull --ff-only && npm ci && npm run build && systemctl restart <service>`.
 
 ---
 
