@@ -1,0 +1,19 @@
+[Unit]
+Description=Jarvis Dashboard (Next.js) — DEV
+After=network.target
+
+[Service]
+Type=simple
+User=dan
+WorkingDirectory=/opt/jarvis-dashboard-dev
+Environment=NODE_ENV=production
+# Dev has its own .env (separate JARVIS_TOKEN + isolated SQLite at
+# /opt/jarvis-dashboard-dev/data/jarvis.db).
+EnvironmentFile=/opt/jarvis-dashboard-dev/.env
+# next directly (the start script hardcodes :4500); dev listens on :4510.
+ExecStart=/opt/jarvis-dashboard-dev/node_modules/.bin/next start -p 4510
+Restart=on-failure
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
