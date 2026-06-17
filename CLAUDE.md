@@ -85,6 +85,12 @@ changes, use the preview tooling (a `.claude/launch.json` is included).
 
 ## Current status (2026-06-17)
 
-Both environments deployed and healthy. DEV is empty; MAIN has the user's real
-projects (BPT 2.0, Space Base Race, Stellar Ascent, Tessera). Pipeline is ready —
-next work happens on `dev`.
+Both environments deployed and healthy. The **DEV environment banner** shipped
+(amber non-prod strip + `[DEV]` tab title, gated by `JARVIS_ENV`, hard-guarded off
+the `:4500` prod port). DEV's `.env` now sets `JARVIS_ENV=dev`.
+
+DEV is seeded with the full project list — **LIVE:** Jarvis, Jarvis Dashboard,
+Jarvis Launcher, Space Base Race; **IN PROGRESS:** BPT 2.0, Stellar Ascent, Tessera
+(with Court Mock + DEMS Mock sub-projects). Note: "Tessera" is the repo in the local
+`Prosecuter Platform/` folder. MAIN holds the user's real projects and stays
+banner-free. Next work happens on `dev`.
