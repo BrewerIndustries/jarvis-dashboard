@@ -46,8 +46,8 @@ const TOKEN = process.env.GITHUB_TOKEN;
 const REF = process.env.JARVIS_REF || "main";
 const OUT = (process.env.OUT || "./data/registry.json").split(",").map((s) => s.trim()).filter(Boolean);
 
-async function fetchDecl(repo) {
-  const url = `https://api.github.com/repos/${ORG}/${repo}/contents/.jarvis.json?ref=${encodeURIComponent(REF)}`;
+async function fetchAt(repo, ref) {
+  const url = `https://api.github.com/repos/${ORG}/${repo}/contents/.jarvis.json?ref=${encodeURIComponent(ref)}`;
   const res = await fetch(url, {
     headers: {
       accept: "application/vnd.github.raw+json",
@@ -55,9 +55,17 @@ async function fetchDecl(repo) {
       ...(TOKEN ? { authorization: `Bearer ${TOKEN}` } : {}),
     },
   });
-  if (res.status === 404) return null;
+  if (res.status === 404) return undefined; // no file on this ref
   if (!res.ok) throw new Error(`GitHub API ${res.status}`);
   return JSON.parse(await res.text());
+}
+
+async function fetchDecl(repo) {
+  // Read from the requested ref; if absent (e.g. a main-only repo has no `dev`
+  // branch), fall back to main so its declaration is still picked up.
+  let decl = await fetchAt(repo, REF);
+  if (decl === undefined && REF !== "main") decl = await fetchAt(repo, "main");
+  return decl ?? null;
 }
 
 function normalizeStatus(s) {
