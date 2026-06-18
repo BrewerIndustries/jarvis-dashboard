@@ -20,6 +20,7 @@ const REPOS = [
   "Jarvis",
   "jarvis-dashboard",
   "jarvis-launcher",
+  "jarvis-timer",
   "bpt-2.0",
   "spacebaserace",
   "Stellar-Ascent",
@@ -34,6 +35,7 @@ const REPOS = [
 const DEFAULTS = {
   "jarvis-dashboard": { id: "dashboard", name: "Jarvis Dashboard", category: "jarvis-tools", status: { prod: "live", dev: "live" }, deploy: { prod: { port: 4500 }, dev: { port: 4510 } } },
   "jarvis-launcher": { id: "launcher", name: "Jarvis Launcher", category: "jarvis-tools", status: { prod: "live", dev: "live" }, deploy: { prod: { port: 4400 }, dev: { port: 4410 } } },
+  "jarvis-timer": { id: "jarvis-timer", name: "Jarvis Timer", category: "standalone", status: { prod: "live", dev: "live" }, deploy: { prod: { url: "https://jarvis-timer.dabrewer.dev/" }, dev: { url: "https://jarvis-timer.dabrewer.dev/dev/" } } },
   Jarvis: { id: "voice", name: "Jarvis", category: "jarvis-tools", status: { prod: "live", dev: "live" }, deploy: { prod: { port: 8080, https: true }, dev: { port: 8090, https: true } } },
   spacebaserace: { id: "spacebaserace", name: "Space Base Race", category: "games", status: { prod: "live", dev: "live" }, deploy: { prod: { url: "https://spacebaserace.dabrewer.dev/" }, dev: { url: "https://spacebaserace.dabrewer.dev/dev/" } } },
   "Stellar-Ascent": { id: "stellar-ascent", name: "Stellar Ascent", category: "games", status: { prod: "live", dev: "live" }, deploy: { prod: { url: "https://stellar-ascent.dabrewer.dev/" }, dev: { url: "https://stellar-ascent.dabrewer.dev/dev/" } } },
