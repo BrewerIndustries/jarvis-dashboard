@@ -70,7 +70,9 @@ changes, use the preview tooling (a `.claude/launch.json` is included).
 - `src/app/api/items/route.ts` — `GET` (list) / `POST` (create, token-gated)
 - `src/app/api/items/[id]/route.ts` — `PATCH` / `DELETE` (token-gated, delete cascades)
 - `src/app/page.tsx` — server entry; resolves `JARVIS_ENV` and passes it to the UI + tab title
-- `src/components/Dashboard.tsx` — the whole UI (tree, columns, collapse, inline edit, DOS theme, env banner)
+- `src/components/Dashboard.tsx` — the whole UI (tree, columns, collapse, inline edit, DOS theme, env banner, live badges)
+- `src/lib/deployments.ts` — maps projects → their dev/prod deployments (localhost port +10 for dev, or explicit URL)
+- `src/app/api/health/route.ts` — pings each deployment for the active env; drives the LIVE/DOWN badge + auto-lane
 - `src/app/globals.css` — DOS/CRT theme (CGA palette, scanlines, double-line boxes)
 - `scripts/jarvis-send.sh` — CLI push helper (reads `~/.config/jarvis/jarvis.env`)
 - `mcp/jarvis-mcp.js` — local MCP server for the Claude desktop app (`add_to_jarvis`, `list_jarvis`)
@@ -85,12 +87,15 @@ changes, use the preview tooling (a `.claude/launch.json` is included).
 
 ## Current status (2026-06-17)
 
-Both environments deployed and healthy. The **DEV environment banner** shipped
-(amber non-prod strip + `[DEV]` tab title, gated by `JARVIS_ENV`, hard-guarded off
-the `:4500` prod port). DEV's `.env` now sets `JARVIS_ENV=dev`.
+Both environments deployed and healthy. Two features shipped on `dev`:
+1. **Environment banner** — amber non-prod strip + `[DEV]` tab title, gated by
+   `JARVIS_ENV`, hard-guarded off the `:4500` prod port. DEV's `.env` sets `JARVIS_ENV=dev`.
+2. **Health-driven lanes** — `deployments.ts` maps projects to their dev/prod instances;
+   `/api/health` pings them for the active env, so deployed projects show a live
+   **`● LIVE`/`○ DOWN`** badge and auto-sit in the LIVE lane (per-environment — the dev
+   board pings dev instances, prod pings prod). Untracked projects keep manual lanes + ⇄.
 
-DEV is seeded with the full project list — **LIVE:** Jarvis, Jarvis Dashboard,
-Jarvis Launcher, Space Base Race; **IN PROGRESS:** BPT 2.0, Stellar Ascent, Tessera
-(with Court Mock + DEMS Mock sub-projects). Note: "Tessera" is the repo in the local
-`Prosecuter Platform/` folder. MAIN holds the user's real projects and stays
-banner-free. Next work happens on `dev`.
+DEV is seeded with the project list — tracked (auto-live): Jarvis, Jarvis Dashboard,
+Jarvis Launcher, Space Base Race, Stellar Ascent; in progress: Tessera (+ Court Mock,
+DEMS Mock); mothballed: BPT 2.0. ("Tessera" is the repo in the local `Prosecuter
+Platform/` folder.) MAIN stays banner-free. Next work happens on `dev`.

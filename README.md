@@ -141,6 +141,13 @@ If `JARVIS_TOKEN` is unset, writes are open (only do that on a trusted network).
   shows an amber **`⚠ <ENV> ENVIRONMENT — NOT PRODUCTION`** strip pinned to the top
   and an `[ENV]` prefix in the browser-tab title. Leave it unset on production so no
   banner shows.
+- **Live deployment status:** projects mapped to a known deployment (in
+  `src/lib/deployments.ts`) show a green **`● LIVE`** / red **`○ DOWN`** badge in place
+  of the manual lane control, and are auto-grouped into the LIVE lane. The status comes
+  from `/api/health`, which pings each project's instance **for this dashboard's
+  environment** — the DEV board (:4510) checks the dev instances, prod (:4500) the prod
+  ones — so the two boards can legitimately differ (e.g. a dev instance down while prod
+  is up). Untracked projects (e.g. not-yet-shipped work) keep their hand-set lane and ⇄.
 
 ## Deploy to the jarvis server
 

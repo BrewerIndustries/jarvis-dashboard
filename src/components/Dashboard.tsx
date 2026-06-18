@@ -39,6 +39,9 @@ const AREA_COLOR: Record<Area, string> = {
   mothballed: "var(--dos-amber)",
 };
 
+/** Per-project deployment health, keyed by project title (from /api/health). */
+type DeployHealth = Record<string, { state: string; ms?: number }>;
+
 // --- helpers -----------------------------------------------------------------
 
 function timeAgo(iso: string): string {
@@ -96,6 +99,7 @@ export default function Dashboard({ env }: { env?: string | null }) {
   const [token, setToken] = useState("");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [now, setNow] = useState(0);
+  const [health, setHealth] = useState<{ env?: string; apps: DeployHealth }>({ apps: {} });
 
   useEffect(() => {
     setToken(localStorage.getItem("jarvis-token") ?? "");
@@ -120,11 +124,25 @@ export default function Dashboard({ env }: { env?: string | null }) {
     }
   }, []);
 
+  const refreshHealth = useCallback(async () => {
+    try {
+      const res = await fetch("/api/health", { cache: "no-store" });
+      const data = await res.json();
+      setHealth({ env: data.env, apps: data.apps ?? {} });
+    } catch {
+      /* keep last good health */
+    }
+  }, []);
+
   useEffect(() => {
     refresh();
-    const t = setInterval(refresh, 8000);
+    refreshHealth();
+    const t = setInterval(() => {
+      refresh();
+      refreshHealth();
+    }, 8000);
     return () => clearInterval(t);
-  }, [refresh]);
+  }, [refresh, refreshHealth]);
 
   const toggle = useCallback((id: string) => {
     setCollapsed((prev) => {
@@ -198,11 +216,14 @@ export default function Dashboard({ env }: { env?: string | null }) {
   const byArea = useMemo(() => {
     const map: Record<Area, TreeItem[]> = { live: [], in_progress: [], mothballed: [] };
     for (const node of tree) {
-      const area = (node.area ?? "in_progress") as Area;
+      // A tracked deployment present in this environment is LIVE by definition;
+      // its lane is health-driven, not the stored area.
+      const tracked = health.apps[node.title];
+      const area = (tracked ? "live" : node.area ?? "in_progress") as Area;
       (map[area] ?? map.in_progress).push(node);
     }
     return map;
-  }, [tree]);
+  }, [tree, health]);
 
   const stats = useMemo(() => {
     const projects = items.filter((i) => i.kind === "project").length;
@@ -232,6 +253,7 @@ export default function Dashboard({ env }: { env?: string | null }) {
                 toggle={toggle}
                 handlers={handlers}
                 now={now}
+                health={health.apps}
               />
             ))
           )}
@@ -324,6 +346,7 @@ function AreaSection({
   toggle,
   handlers,
   now,
+  health,
 }: {
   area: Area;
   nodes: TreeItem[];
@@ -331,6 +354,7 @@ function AreaSection({
   toggle: (id: string) => void;
   handlers: Handlers;
   now: number;
+  health: DeployHealth;
 }) {
   const key = `area:${area}`;
   const isClosed = collapsed.has(key);
@@ -355,7 +379,7 @@ function AreaSection({
           ) : (
             nodes.map((node) =>
               isContainer(node.kind) ? (
-                <ProjectCard key={node.id} node={node} collapsed={collapsed} handlers={handlers} now={now} />
+                <ProjectCard key={node.id} node={node} collapsed={collapsed} handlers={handlers} now={now} health={health} />
               ) : (
                 <div key={node.id} className="dos-box px-2 py-1">
                   <LeafRow node={node} prefix="" handlers={handlers} now={now} />
@@ -385,13 +409,16 @@ function ProjectCard({
   collapsed,
   handlers,
   now,
+  health,
 }: {
   node: TreeItem;
   collapsed: Set<string>;
   handlers: Handlers;
   now: number;
+  health: DeployHealth;
 }) {
   const isClosed = collapsed.has(node.id);
+  const status = health[node.title];
 
   return (
     <div className="dos-box">
@@ -401,13 +428,23 @@ function ProjectCard({
             <span className="w-5 shrink-0 text-[var(--dos-cyan-bright)]">[{isClosed ? "+" : "−"}]</span>
             <span className="glow min-w-0 break-words font-bold text-[var(--dos-bright)]">{node.title}</span>
           </button>
-          <button
-            onClick={() => handlers.cycleArea(node)}
-            title="Move to next lane (LIVE → IN PROGRESS → MOTHBALLED)"
-            className="shrink-0 text-[var(--dos-cyan)] opacity-0 transition group-hover:opacity-100 hover:text-[var(--dos-cyan-bright)]"
-          >
-            ⇄
-          </button>
+          {status ? (
+            <span
+              title={`deployment ${status.state}${status.ms != null ? ` · ${status.ms}ms` : ""} — lane is auto from health`}
+              className="shrink-0 pt-0.5 text-xs font-bold tracking-wide"
+              style={{ color: status.state === "online" ? "var(--dos-green)" : "var(--dos-red)" }}
+            >
+              {status.state === "online" ? "● LIVE" : "○ DOWN"}
+            </span>
+          ) : (
+            <button
+              onClick={() => handlers.cycleArea(node)}
+              title="Move to next lane (LIVE → IN PROGRESS → MOTHBALLED)"
+              className="shrink-0 text-[var(--dos-cyan)] opacity-0 transition group-hover:opacity-100 hover:text-[var(--dos-cyan-bright)]"
+            >
+              ⇄
+            </button>
+          )}
           <button
             onClick={() => handlers.remove(node.id)}
             title="Delete project and everything under it"
