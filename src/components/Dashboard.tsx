@@ -36,6 +36,7 @@ const PRIORITY: Record<string, { mark: string; color: string }> = {
 const AREA_COLOR: Record<Area, string> = {
   live: "var(--dos-green)",
   in_progress: "var(--dos-cyan-bright)",
+  ideas: "var(--dos-yellow)",
   mothballed: "var(--dos-amber)",
 };
 
@@ -232,7 +233,7 @@ export default function Dashboard({ env }: { env?: string | null }) {
   const tree = useMemo(() => buildTree(filtered), [filtered]);
 
   const byArea = useMemo(() => {
-    const map: Record<Area, TreeItem[]> = { live: [], in_progress: [], mothballed: [] };
+    const map: Record<Area, TreeItem[]> = { live: [], in_progress: [], ideas: [], mothballed: [] };
     for (const node of tree) {
       // Declared status from the shared registry wins (per-environment); a project
       // not in the registry keeps its hand-set lane.
@@ -258,7 +259,7 @@ export default function Dashboard({ env }: { env?: string | null }) {
       <div className="mx-auto max-w-[1600px]">
         <Header stats={stats} query={query} setQuery={setQuery} hideDone={hideDone} setHideDone={setHideDone} />
 
-        <main className="mt-4 grid items-start gap-4 lg:grid-cols-3">
+        <main className="mt-4 grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {loading ? (
             <p className="px-1 text-[var(--dos-gray)]">C:\JARVIS&gt; loading<span className="cursor" /></p>
           ) : (
