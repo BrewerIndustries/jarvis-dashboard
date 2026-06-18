@@ -15,7 +15,7 @@
 # The project (and sub-project) are auto-created if they don't exist yet, and a
 # new project lands in its --area (default: in_progress).
 #
-# Flags: -p/--project  --subproject  --area(live|in_progress|mothballed)
+# Flags: -p/--project  --subproject  --area(live|in_progress|ideas|mothballed)
 #        -k/--kind(project|subproject|task|note|blocker)
 #        -s/--status(todo|in_progress|blocked|done)  --priority(low|normal|high|urgent)
 #        -b/--body "..."   -u/--url "..."
