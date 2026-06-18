@@ -105,5 +105,7 @@ in progress: Tessera (+ its mock sub-projects); mothballed: BPT 2.0. ("Tessera" 
 repo in the local `Prosecuter Platform/` folder; prod's Tessera sub-projects keep their
 original longer titles.) Next work happens on `dev`.
 
-Note: promote with `git push origin dev:main` — checking out `main` locally is blocked
-by a permission guard, but the remote fast-forward push works.
+Note: promote to `main` ONLY via a PR the user approves — `gh pr create --base main
+--head dev`, then after they merge, deploy prod. Do NOT fast-forward or `git push
+origin dev:main` (the user considers FF shortcuts cheating the review). Local `main`
+checkout is permission-blocked by design.
