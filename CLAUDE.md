@@ -71,8 +71,11 @@ changes, use the preview tooling (a `.claude/launch.json` is included).
 - `src/app/api/items/[id]/route.ts` — `PATCH` / `DELETE` (token-gated, delete cascades)
 - `src/app/page.tsx` — server entry; resolves `JARVIS_ENV` and passes it to the UI + tab title
 - `src/components/Dashboard.tsx` — the whole UI (tree, columns, collapse, inline edit, DOS theme, env banner, live badges)
-- `src/lib/deployments.ts` — maps projects → their dev/prod deployments (localhost port +10 for dev, or explicit URL)
-- `src/app/api/health/route.ts` — pings each deployment for the active env; drives the LIVE/DOWN badge + auto-lane
+- `src/lib/registry.ts` — reads the synced `data/registry.json` (unified project list); per-env declared lane + deploy targets
+- `src/app/api/registry/route.ts` — declared lane per project for the active env (drives which lane a project sits in)
+- `src/app/api/health/route.ts` — pings each deployment for the active env; drives the LIVE/DOWN badge
+- `scripts/sync-registry.mjs` — aggregates each repo's committed `.jarvis.json` (GitHub API) → `data/registry.json`; run on the server via cron
+- **`.jarvis.json`** (per repo, repo root) — a project's declared `status` (per-env lane) + `deploy` info; the single source of truth both apps read. Shape: `{ id, name, category, status: {prod,dev}|"mothballed", deploy: {prod:{port|url,https?}, dev:{…}} }`
 - `src/app/globals.css` — DOS/CRT theme (CGA palette, scanlines, double-line boxes)
 - `scripts/jarvis-send.sh` — CLI push helper (reads `~/.config/jarvis/jarvis.env`)
 - `mcp/jarvis-mcp.js` — local MCP server for the Claude desktop app (`add_to_jarvis`, `list_jarvis`)

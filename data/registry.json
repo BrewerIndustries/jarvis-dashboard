@@ -1,0 +1,134 @@
+[
+  {
+    "id": "voice",
+    "name": "Jarvis",
+    "category": "jarvis-tools",
+    "status": {
+      "prod": "live",
+      "dev": "live"
+    },
+    "deploy": {
+      "prod": {
+        "port": 8080,
+        "https": true
+      },
+      "dev": {
+        "port": 8090,
+        "https": true
+      }
+    },
+    "repo": "BrewerIndustries/Jarvis"
+  },
+  {
+    "id": "dashboard",
+    "name": "Jarvis Dashboard",
+    "category": "jarvis-tools",
+    "status": {
+      "prod": "live",
+      "dev": "live"
+    },
+    "deploy": {
+      "prod": {
+        "port": 4500
+      },
+      "dev": {
+        "port": 4510
+      }
+    },
+    "repo": "BrewerIndustries/jarvis-dashboard"
+  },
+  {
+    "id": "launcher",
+    "name": "Jarvis Launcher",
+    "category": "jarvis-tools",
+    "status": {
+      "prod": "live",
+      "dev": "live"
+    },
+    "deploy": {
+      "prod": {
+        "port": 4400
+      },
+      "dev": {
+        "port": 4410
+      }
+    },
+    "repo": "BrewerIndustries/jarvis-launcher"
+  },
+  {
+    "id": "bpt-2",
+    "name": "BPT 2.0",
+    "category": "apps",
+    "status": {
+      "prod": "mothballed",
+      "dev": "mothballed"
+    },
+    "repo": "BrewerIndustries/bpt-2.0"
+  },
+  {
+    "id": "spacebaserace",
+    "name": "Space Base Race",
+    "category": "games",
+    "status": {
+      "prod": "live",
+      "dev": "live"
+    },
+    "deploy": {
+      "prod": {
+        "url": "https://spacebaserace.dabrewer.dev/"
+      },
+      "dev": {
+        "url": "https://spacebaserace.dabrewer.dev/dev/"
+      }
+    },
+    "repo": "BrewerIndustries/spacebaserace"
+  },
+  {
+    "id": "stellar-ascent",
+    "name": "Stellar Ascent",
+    "category": "games",
+    "status": {
+      "prod": "live",
+      "dev": "live"
+    },
+    "deploy": {
+      "prod": {
+        "url": "https://stellar-ascent.dabrewer.dev/"
+      },
+      "dev": {
+        "url": "https://stellar-ascent.dabrewer.dev/dev/"
+      }
+    },
+    "repo": "BrewerIndustries/Stellar-Ascent"
+  },
+  {
+    "id": "tessera",
+    "name": "Tessera",
+    "category": "apps",
+    "status": {
+      "prod": "in_progress",
+      "dev": "in_progress"
+    },
+    "repo": "BrewerIndustries/tessera"
+  },
+  {
+    "id": "court-mock",
+    "name": "Court Mock",
+    "category": "apps",
+    "status": {
+      "prod": "in_progress",
+      "dev": "in_progress"
+    },
+    "repo": "BrewerIndustries/tessera-court-mock"
+  },
+  {
+    "id": "dems-mock",
+    "name": "DEMS Mock",
+    "category": "apps",
+    "status": {
+      "prod": "in_progress",
+      "dev": "in_progress"
+    },
+    "repo": "BrewerIndustries/tessera-dems-mock"
+  }
+]

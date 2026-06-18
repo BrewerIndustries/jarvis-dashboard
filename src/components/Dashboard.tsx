@@ -100,6 +100,7 @@ export default function Dashboard({ env }: { env?: string | null }) {
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [now, setNow] = useState(0);
   const [health, setHealth] = useState<{ env?: string; apps: DeployHealth }>({ apps: {} });
+  const [lanes, setLanes] = useState<Record<string, string>>({});
 
   useEffect(() => {
     setToken(localStorage.getItem("jarvis-token") ?? "");
@@ -134,15 +135,32 @@ export default function Dashboard({ env }: { env?: string | null }) {
     }
   }, []);
 
+  const refreshRegistry = useCallback(async () => {
+    try {
+      const res = await fetch("/api/registry", { cache: "no-store" });
+      const data = await res.json();
+      const map: Record<string, string> = {};
+      for (const [name, info] of Object.entries(data.projects ?? {})) {
+        const lane = (info as { lane?: string }).lane;
+        if (lane) map[name] = lane;
+      }
+      setLanes(map);
+    } catch {
+      /* keep last good lanes */
+    }
+  }, []);
+
   useEffect(() => {
     refresh();
+    refreshRegistry();
     refreshHealth();
     const t = setInterval(() => {
       refresh();
+      refreshRegistry();
       refreshHealth();
     }, 8000);
     return () => clearInterval(t);
-  }, [refresh, refreshHealth]);
+  }, [refresh, refreshRegistry, refreshHealth]);
 
   const toggle = useCallback((id: string) => {
     setCollapsed((prev) => {
@@ -216,14 +234,14 @@ export default function Dashboard({ env }: { env?: string | null }) {
   const byArea = useMemo(() => {
     const map: Record<Area, TreeItem[]> = { live: [], in_progress: [], mothballed: [] };
     for (const node of tree) {
-      // A tracked deployment present in this environment is LIVE by definition;
-      // its lane is health-driven, not the stored area.
-      const tracked = health.apps[node.title];
-      const area = (tracked ? "live" : node.area ?? "in_progress") as Area;
+      // Declared status from the shared registry wins (per-environment); a project
+      // not in the registry keeps its hand-set lane.
+      const declared = lanes[node.title] as Area | undefined;
+      const area = (declared ?? node.area ?? "in_progress") as Area;
       (map[area] ?? map.in_progress).push(node);
     }
     return map;
-  }, [tree, health]);
+  }, [tree, lanes]);
 
   const stats = useMemo(() => {
     const projects = items.filter((i) => i.kind === "project").length;
@@ -254,6 +272,7 @@ export default function Dashboard({ env }: { env?: string | null }) {
                 handlers={handlers}
                 now={now}
                 health={health.apps}
+                lanes={lanes}
               />
             ))
           )}
@@ -347,6 +366,7 @@ function AreaSection({
   handlers,
   now,
   health,
+  lanes,
 }: {
   area: Area;
   nodes: TreeItem[];
@@ -355,6 +375,7 @@ function AreaSection({
   handlers: Handlers;
   now: number;
   health: DeployHealth;
+  lanes: Record<string, string>;
 }) {
   const key = `area:${area}`;
   const isClosed = collapsed.has(key);
@@ -379,7 +400,7 @@ function AreaSection({
           ) : (
             nodes.map((node) =>
               isContainer(node.kind) ? (
-                <ProjectCard key={node.id} node={node} collapsed={collapsed} handlers={handlers} now={now} health={health} />
+                <ProjectCard key={node.id} node={node} collapsed={collapsed} handlers={handlers} now={now} health={health} lanes={lanes} />
               ) : (
                 <div key={node.id} className="dos-box px-2 py-1">
                   <LeafRow node={node} prefix="" handlers={handlers} now={now} />
@@ -410,15 +431,18 @@ function ProjectCard({
   handlers,
   now,
   health,
+  lanes,
 }: {
   node: TreeItem;
   collapsed: Set<string>;
   handlers: Handlers;
   now: number;
   health: DeployHealth;
+  lanes: Record<string, string>;
 }) {
   const isClosed = collapsed.has(node.id);
   const status = health[node.title];
+  const registryManaged = node.title in lanes;
 
   return (
     <div className="dos-box">
@@ -430,11 +454,18 @@ function ProjectCard({
           </button>
           {status ? (
             <span
-              title={`deployment ${status.state}${status.ms != null ? ` · ${status.ms}ms` : ""} — lane is auto from health`}
+              title={`deployment ${status.state}${status.ms != null ? ` · ${status.ms}ms` : ""} — lane is declared in the repo's .jarvis.json`}
               className="shrink-0 pt-0.5 text-xs font-bold tracking-wide"
               style={{ color: status.state === "online" ? "var(--dos-green)" : "var(--dos-red)" }}
             >
               {status.state === "online" ? "● LIVE" : "○ DOWN"}
+            </span>
+          ) : registryManaged ? (
+            <span
+              title="Lane is declared in the repo's .jarvis.json (no deployment to ping)"
+              className="shrink-0 pt-0.5 text-[10px] uppercase tracking-wider text-[var(--dos-gray)]"
+            >
+              declared
             </span>
           ) : (
             <button

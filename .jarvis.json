@@ -1,0 +1,7 @@
+{
+  "id": "dashboard",
+  "name": "Jarvis Dashboard",
+  "category": "jarvis-tools",
+  "status": { "prod": "live", "dev": "live" },
+  "deploy": { "prod": { "port": 4500 }, "dev": { "port": 4510 } }
+}
