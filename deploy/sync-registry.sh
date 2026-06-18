@@ -2,16 +2,18 @@
 # Refresh the shared project registry by reading each repo's .jarvis.json via the
 # GitHub API. Intended to be run by cron on the jarvis server.
 #
-# The GitHub token (optional, but required to read private-repo declarations) is
-# read from /opt/jarvis/registry-sync.env as `GITHUB_TOKEN=...`. Without it the sync
-# still produces a complete registry from the built-in defaults — it just can't pick
-# up per-repo .jarvis.json overrides.
+# The GitHub token (optional, but required to read PRIVATE-repo declarations) is read
+# from ~/.config/jarvis/registry-sync.env (or /opt/jarvis/registry-sync.env) as
+# `GITHUB_TOKEN=...`. Without it the sync still produces a complete registry from the
+# built-in defaults + any PUBLIC repos' .jarvis.json — it just can't read private overrides.
 #
 # Writes each environment's registry from the matching branch (dev→dev, prod→main).
 # The prod block self-activates once the registry pipeline is promoted to main.
 set -uo pipefail
 
-[ -f /opt/jarvis/registry-sync.env ] && set -a && . /opt/jarvis/registry-sync.env && set +a
+for envf in "$HOME/.config/jarvis/registry-sync.env" /opt/jarvis/registry-sync.env; do
+  if [ -f "$envf" ]; then set -a; . "$envf"; set +a; break; fi
+done
 
 NODE="$(command -v node || echo /usr/bin/node)"
 
