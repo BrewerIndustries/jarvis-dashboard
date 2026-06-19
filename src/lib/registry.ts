@@ -1,16 +1,16 @@
 // Reads the unified project registry produced by scripts/sync-registry.mjs, which
 // aggregates each repo's committed .jarvis.json. This is the single source of truth
-// the dashboard (and, eventually, the launcher) share: declared lifecycle status
-// drives the LANE; the /api/health ping drives the live/down badge.
+// the dashboard and the launcher share: declared lifecycle status drives the LANE;
+// the /api/health ping drives the live/down badge.
 //
 // If the registry hasn't been synced yet, registry() returns [] and the dashboard
-// gracefully falls back to each project's hand-set lane with no badges.
+// shows an empty state.
 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 export type DeployEnv = "dev" | "prod";
-export type Lane = "live" | "in_progress" | "ideas" | "mothballed";
+export type Lane = "live" | "in_progress" | "mothballed";
 
 /** Which environment this dashboard instance represents (matches page.tsx). */
 export function activeEnv(): DeployEnv {
@@ -24,15 +24,21 @@ interface DeployTarget {
   https?: boolean;
 }
 
+/** Shape written by sync-registry.mjs into data/registry.json. */
 export interface RegistryEntry {
-  id?: string;
-  name: string; // matches the dashboard project's title
+  id: string;
+  name: string;
+  description?: string;
+  version?: string | null;
   category?: string;
-  repo?: string;
-  /** Per-env lifecycle lane, or a single value applied to both. */
+  /** Per-env lifecycle lane. */
   status: { prod: Lane; dev: Lane } | Lane;
-  /** How to reach/health-check each env's instance. */
-  deploy?: { prod?: DeployTarget; dev?: DeployTarget };
+  lastCommit?: string | null;
+  backlog?: number;
+  repo?: string;
+  repoUrl?: string;
+  liveUrl?: string | null;
+  deploy?: Record<string, DeployTarget> | null;
 }
 
 export function registry(): RegistryEntry[] {
@@ -41,7 +47,7 @@ export function registry(): RegistryEntry[] {
     const parsed = JSON.parse(readFileSync(path, "utf8"));
     if (Array.isArray(parsed)) return parsed as RegistryEntry[];
   } catch {
-    /* not synced yet — caller falls back */
+    /* not synced yet */
   }
   return [];
 }

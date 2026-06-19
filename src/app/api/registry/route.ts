@@ -4,16 +4,15 @@ import { activeEnv, laneFor, registry } from "@/lib/registry";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// GET /api/registry — declared lifecycle lane per project for THIS environment.
-// Fast (no network); drives which lane each registered project sits in.
-// Returns { env, projects: { [name]: { lane } } }.
+// GET /api/registry — full project card array for THIS environment.
+// Each card carries its computed lane (per-env), plus all fields from the synced
+// registry.json (name, description, version, lastCommit, backlog, repoUrl, liveUrl).
+// Returns { env, cards: CardEntry[] }.
 export function GET() {
   const env = activeEnv();
-  const projects = Object.fromEntries(
-    registry().map((e) => [e.name, { lane: laneFor(e, env) }]),
-  );
+  const cards = registry().map((e) => ({ ...e, lane: laneFor(e, env) }));
   return NextResponse.json(
-    { env, projects },
+    { env, cards },
     { headers: { "cache-control": "no-store" } },
   );
 }

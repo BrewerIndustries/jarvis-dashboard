@@ -46,13 +46,13 @@ function ping(url: string): Promise<{ ok: boolean; ms: number }> {
 export async function GET() {
   const env = activeEnv();
   const targets = registry()
-    .map((e) => ({ name: e.name, url: targetUrl(e, env) }))
-    .filter((t): t is { name: string; url: string } => t.url !== null);
+    .map((e) => ({ id: e.id, url: targetUrl(e, env) }))
+    .filter((t): t is { id: string; url: string } => t.url !== null);
 
   const entries = await Promise.all(
-    targets.map(async ({ name, url }) => {
+    targets.map(async ({ id, url }) => {
       const { ok, ms } = await ping(url);
-      return [name, { state: ok ? "online" : "offline", ms }] as const;
+      return [id, { state: ok ? "online" : "offline", ms }] as const;
     }),
   );
 
