@@ -35,6 +35,21 @@ ssh dan@100.102.159.57 /opt/jarvis-dashboard/deploy/update.sh           # → MA
 
 Each `update*.sh` does `git pull --ff-only && npm ci && npm run build && systemctl restart <service>`.
 
+## Project registry sync
+
+`scripts/sync-registry.mjs` reads each repo's committed `.jarvis.json` (via the GitHub
+API) and writes the unified `data/registry.json` that the dashboard reads for project
+lanes + health targets. `deploy/sync-registry.sh` is the cron wrapper (refreshes both the
+dev and prod registries from the matching branch); it's installed in `dan`'s crontab to
+run every 15 min.
+
+**Token (one-time):** put a GitHub token in `~/.config/jarvis/registry-sync.env` as
+`GITHUB_TOKEN=…` — a fine-grained PAT (owner `BrewerIndustries`, **Contents: Read-only**)
+or a classic PAT with `repo` scope. Without it the registry still builds from the
+built-in defaults plus any **public** repos' `.jarvis.json`; the token unlocks the
+**private** repos' declarations. Run on demand with
+`/opt/jarvis-dashboard-dev/deploy/sync-registry.sh`; logs to `~/.config/jarvis/registry-sync.log`.
+
 ---
 
 ## First-time / from-scratch setup (already done once)

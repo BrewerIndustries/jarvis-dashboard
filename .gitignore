@@ -9,6 +9,9 @@ next-env.d.ts
 # Local data + secrets
 /data/*.db
 /data/*.db-*
+# Generated/runtime data written on the server (synced registry, launcher's
+# apps.json override) — never tracked, or `git pull` fights the cron's writes.
+/data/*.json
 .env
 .env.local
 .env*.local

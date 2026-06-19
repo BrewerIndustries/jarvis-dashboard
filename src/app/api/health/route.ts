@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import * as http from "node:http";
 import * as https from "node:https";
-import { activeEnv, deployments, targetUrl } from "@/lib/deployments";
+import { activeEnv, registry, targetUrl } from "@/lib/registry";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,19 +40,19 @@ function ping(url: string): Promise<{ ok: boolean; ms: number }> {
   });
 }
 
-// GET /api/health — ping each known deployment for THIS dashboard's environment
+// GET /api/health — ping each registered deployment for THIS dashboard's environment
 // (dev board → dev instances, prod board → prod). Returns the active env plus
-// { [projectTitle]: { state, ms } } for every deployment present in that env.
+// { [projectName]: { state, ms } } for every project that has an instance in this env.
 export async function GET() {
   const env = activeEnv();
-  const targets = deployments()
-    .map((d) => ({ title: d.title, url: targetUrl(d, env) }))
-    .filter((t): t is { title: string; url: string } => t.url !== null);
+  const targets = registry()
+    .map((e) => ({ name: e.name, url: targetUrl(e, env) }))
+    .filter((t): t is { name: string; url: string } => t.url !== null);
 
   const entries = await Promise.all(
-    targets.map(async ({ title, url }) => {
+    targets.map(async ({ name, url }) => {
       const { ok, ms } = await ping(url);
-      return [title, { state: ok ? "online" : "offline", ms }] as const;
+      return [name, { state: ok ? "online" : "offline", ms }] as const;
     }),
   );
 

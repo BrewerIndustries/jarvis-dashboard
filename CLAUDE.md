@@ -56,7 +56,7 @@ changes, use the preview tooling (a `.claude/launch.json` is included).
 ## Data model (one `items` table, hierarchy via `parentId`)
 
 - `kind`: `project | subproject | task | note | blocker`
-- `area` (lane, on projects): `live | in_progress | mothballed`  ← the columns
+- `area` (lane, on projects): `live | in_progress | ideas | mothballed`  ← the columns (in order)
 - `status` (tasks): `todo | in_progress | blocked | done`
 - `priority`: `low | normal | high | urgent`
 - also: `title`, `body` (description, editable inline for containers), `url`, `source`, `parentId`
@@ -71,8 +71,11 @@ changes, use the preview tooling (a `.claude/launch.json` is included).
 - `src/app/api/items/[id]/route.ts` — `PATCH` / `DELETE` (token-gated, delete cascades)
 - `src/app/page.tsx` — server entry; resolves `JARVIS_ENV` and passes it to the UI + tab title
 - `src/components/Dashboard.tsx` — the whole UI (tree, columns, collapse, inline edit, DOS theme, env banner, live badges)
-- `src/lib/deployments.ts` — maps projects → their dev/prod deployments (localhost port +10 for dev, or explicit URL)
-- `src/app/api/health/route.ts` — pings each deployment for the active env; drives the LIVE/DOWN badge + auto-lane
+- `src/lib/registry.ts` — reads the synced `data/registry.json` (unified project list); per-env declared lane + deploy targets
+- `src/app/api/registry/route.ts` — declared lane per project for the active env (drives which lane a project sits in)
+- `src/app/api/health/route.ts` — pings each deployment for the active env; drives the LIVE/DOWN badge
+- `scripts/sync-registry.mjs` — aggregates each repo's committed `.jarvis.json` (GitHub API) → `data/registry.json`; run on the server via cron
+- **`.jarvis.json`** (per repo, repo root) — a project's declared `status` (per-env lane) + `deploy` info; the single source of truth both apps read. Shape: `{ id, name, category, status: {prod,dev}|"mothballed", deploy: {prod:{port|url,https?}, dev:{…}} }`
 - `src/app/globals.css` — DOS/CRT theme (CGA palette, scanlines, double-line boxes)
 - `scripts/jarvis-send.sh` — CLI push helper (reads `~/.config/jarvis/jarvis.env`)
 - `mcp/jarvis-mcp.js` — local MCP server for the Claude desktop app (`add_to_jarvis`, `list_jarvis`)
@@ -90,12 +93,25 @@ changes, use the preview tooling (a `.claude/launch.json` is included).
 Both environments deployed and healthy. Two features shipped on `dev`:
 1. **Environment banner** — amber non-prod strip + `[DEV]` tab title, gated by
    `JARVIS_ENV`, hard-guarded off the `:4500` prod port. DEV's `.env` sets `JARVIS_ENV=dev`.
-2. **Health-driven lanes** — `deployments.ts` maps projects to their dev/prod instances;
-   `/api/health` pings them for the active env, so deployed projects show a live
-   **`● LIVE`/`○ DOWN`** badge and auto-sit in the LIVE lane (per-environment — the dev
-   board pings dev instances, prod pings prod). Untracked projects keep manual lanes + ⇄.
+2. **Live health badges** — `/api/health` pings each deployment for the active env;
+   deployed projects show a **`● LIVE`/`○ DOWN`** badge (per-environment). On **both** envs.
+3. **Shared registry (on `dev` only so far)** — each repo declares a `.jarvis.json` (per-env
+   `status` + deploy info); `scripts/sync-registry.mjs` (cron every 15 min via
+   `deploy/sync-registry.sh`) aggregates them → `data/registry.json`, read by `registry.ts`.
+   Declared status drives the **lane** (per env, served by `/api/registry`); health is the
+   badge. 5/9 repos declared (dashboard, Jarvis, bpt-2.0, spacebaserace, Stellar-Ascent);
+   the rest use accurate built-in defaults. **Pending:** GitHub token in
+   `~/.config/jarvis/registry-sync.env` (unlocks private-repo declarations), launcher
+   consumption of the registry, Tessera+mocks `.jarvis.json` (main-only → PR), and promoting
+   the registry pipeline to prod (PR).
 
-DEV is seeded with the project list — tracked (auto-live): Jarvis, Jarvis Dashboard,
-Jarvis Launcher, Space Base Race, Stellar Ascent; in progress: Tessera (+ Court Mock,
-DEMS Mock); mothballed: BPT 2.0. ("Tessera" is the repo in the local `Prosecuter
-Platform/` folder.) MAIN stays banner-free. Next work happens on `dev`.
+Features 1–2 are live on **both** environments (banner stays hidden on prod); the registry
+pipeline (3) is **dev-only** so far. Both boards carry the same project set — live: Jarvis,
+Jarvis Dashboard, Jarvis Launcher, Space Base Race, Stellar Ascent; in progress: Tessera
+(+ mock sub-projects); mothballed: BPT 2.0. ("Tessera" is the repo in the local `Prosecuter
+Platform/` folder.) Next work happens on `dev`.
+
+Note: promote to `main` ONLY via a PR the user approves — `gh pr create --base main
+--head dev`, then after they merge, deploy prod. Do NOT fast-forward or `git push
+origin dev:main` (the user considers FF shortcuts cheating the review). Local `main`
+checkout is permission-blocked by design.
