@@ -123,13 +123,13 @@ export default function Dashboard({ env }: { env?: string | null }) {
         <div className="mx-auto max-w-[1600px]">
           <Header liveCount={liveCount} totalCount={totalCount} />
 
-          <main className="mt-4 grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <main className="mt-6 flex flex-col gap-8">
             {loading ? (
-              <p className="col-span-3 px-1 text-[var(--dos-gray)]">
+              <p className="px-1 text-[var(--dos-gray)]">
                 C:\JARVIS&gt; loading<span className="cursor" />
               </p>
             ) : cards.length === 0 ? (
-              <p className="col-span-3 px-1 text-[var(--dos-gray)]">
+              <p className="px-1 text-[var(--dos-gray)]">
                 C:\JARVIS&gt; no registry — run sync-registry.mjs
               </p>
             ) : (
@@ -204,9 +204,9 @@ function LaneSection({
   now: number;
 }) {
   return (
-    <section className="flex flex-col gap-2">
+    <section>
       <div
-        className="dos-bar flex items-center gap-2 px-3 py-1 text-sm font-bold tracking-wider"
+        className="dos-bar flex items-center gap-2 px-3 py-1.5 text-sm font-bold tracking-wider"
         style={{ background: LANE_COLOR[lane] }}
       >
         <span>■ {LANE_LABEL[lane]}</span>
@@ -214,11 +214,16 @@ function LaneSection({
       </div>
 
       {cards.length === 0 ? (
-        <p className="py-3 text-center text-sm text-[var(--dos-gray)]">— empty —</p>
+        <p className="py-4 text-sm text-[var(--dos-gray)]">— empty —</p>
       ) : (
-        cards.map((card) => (
-          <ProjectCard key={card.id} card={card} health={health} now={now} />
-        ))
+        <div
+          className="mt-3 grid gap-3"
+          style={{ gridTemplateColumns: "repeat(auto-fill, minmax(260px, 1fr))" }}
+        >
+          {cards.map((card) => (
+            <ProjectCard key={card.id} card={card} health={health} now={now} />
+          ))}
+        </div>
       )}
     </section>
   );
