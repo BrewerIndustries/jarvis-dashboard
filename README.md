@@ -36,7 +36,7 @@ Each item:
 | `kind`       | `project · subproject · task · note · blocker`       | `task`         |
 | `project`    | name of parent project (auto-created if missing)     | —              |
 | `subproject` | name of parent sub-project under `project`           | —              |
-| `area`       | `live · in_progress · ideas · mothballed` (on the project) | `in_progress`  |
+| `area`       | `live · in_progress · mothballed` (on the project)  | `in_progress`  |
 | `status`     | `todo · in_progress · blocked · done`               | `todo`         |
 | `priority`   | `low · normal · high · urgent`                       | `normal`       |
 | `body`       | longer description (optional)                        | —              |

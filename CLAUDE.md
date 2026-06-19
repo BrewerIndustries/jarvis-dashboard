@@ -56,7 +56,7 @@ changes, use the preview tooling (a `.claude/launch.json` is included).
 ## Data model (one `items` table, hierarchy via `parentId`)
 
 - `kind`: `project | subproject | task | note | blocker`
-- `area` (lane, on projects): `live | in_progress | ideas | mothballed`  ← the columns (in order)
+- `area` (lane, on projects): `live | in_progress | mothballed`  ← the columns (in order). Un-started ideas live in the separate **Idea Log** app (idea-log.dabrewer.dev), not in a dashboard lane.
 - `status` (tasks): `todo | in_progress | blocked | done`
 - `priority`: `low | normal | high | urgent`
 - also: `title`, `body` (description, editable inline for containers), `url`, `source`, `parentId`

@@ -1,13 +1,12 @@
 export const ITEM_KINDS = ["project", "subproject", "task", "note", "blocker"] as const;
 export type ItemKind = (typeof ITEM_KINDS)[number];
 
-export const AREAS = ["live", "in_progress", "ideas", "mothballed"] as const;
+export const AREAS = ["live", "in_progress", "mothballed"] as const;
 export type Area = (typeof AREAS)[number];
 
 export const AREA_LABEL: Record<Area, string> = {
   live: "LIVE",
   in_progress: "IN PROGRESS",
-  ideas: "IDEAS",
   mothballed: "MOTHBALLED",
 };
 

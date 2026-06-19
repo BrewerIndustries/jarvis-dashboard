@@ -10,7 +10,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 export type DeployEnv = "dev" | "prod";
-export type Lane = "live" | "in_progress" | "ideas" | "mothballed";
+export type Lane = "live" | "in_progress" | "mothballed";
 
 /** Which environment this dashboard instance represents (matches page.tsx). */
 export function activeEnv(): DeployEnv {
