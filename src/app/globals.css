@@ -32,6 +32,9 @@ body {
   font-family: "Cascadia Code", "JetBrains Mono", "IBM Plex Mono", "SFMono-Regular",
     Consolas, "Courier New", monospace;
   font-variant-ligatures: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 * {
@@ -40,7 +43,7 @@ body {
 
 /* Phosphor glow on text */
 .glow {
-  text-shadow: 0 0 1px currentColor, 0 0 6px rgba(95, 255, 255, 0.25);
+  text-shadow: 0 0 2px currentColor, 0 0 8px rgba(95, 255, 255, 0.45);
 }
 
 /* Double-line box-drawing border, the DOS TUI signature */

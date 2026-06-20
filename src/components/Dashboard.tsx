@@ -249,9 +249,13 @@ function ProjectCard({
         <span className="glow min-w-0 flex-1 truncate font-bold">{card.name}</span>
         {h ? (
           <span
-            className="shrink-0 text-xs font-bold tracking-wide"
+            className="shrink-0 px-1 text-xs font-bold tracking-wide"
             title={h.ms != null ? `${h.ms}ms` : undefined}
-            style={{ color: h.state === "online" ? "var(--dos-green)" : "var(--dos-red)" }}
+            style={
+              h.state === "online"
+                ? { background: "var(--dos-bg-deep)", color: "var(--dos-green)" }
+                : { background: "var(--dos-red)", color: "var(--dos-bright)" }
+            }
           >
             {h.state === "online" ? "● LIVE" : "○ DOWN"}
           </span>
