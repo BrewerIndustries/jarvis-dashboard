@@ -268,7 +268,7 @@ function ProjectCard({
       <div className="flex flex-col gap-1.5 px-3 py-2">
         {card.description && (
           <p
-            className="text-xs leading-relaxed text-[var(--dos-gray)]"
+            className="text-[11px] leading-relaxed text-[var(--dos-gray)]"
             style={{
               display: "-webkit-box",
               WebkitBoxOrient: "vertical",
