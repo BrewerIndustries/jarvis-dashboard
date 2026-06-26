@@ -171,18 +171,18 @@ function EnvBanner({ env }: { env: string }) {
 function Header({ liveCount, totalCount }: { liveCount: number; totalCount: number }) {
   return (
     <header className="dos-box">
-      <div className="dos-bar flex items-center gap-2 px-3 py-1 text-sm font-bold tracking-wider">
+      <div className="dos-bar flex items-center gap-2 px-3 py-1 text-xs font-bold tracking-[0.15em]">
         <span>▓▒░</span>
         <span>JARVIS.SYS — PROJECT CONTROL</span>
       </div>
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-3 py-2 text-sm">
-        <span className="glow font-bold text-[var(--dos-cyan-bright)]">
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-3 py-2">
+        <span className="glow font-bold tracking-[0.2em] text-[var(--dos-cyan-bright)]">
           ████ JARVIS<span className="cursor" />
         </span>
-        <span className="text-[var(--dos-gray)]">
+        <span className="text-xs tracking-[0.1em] text-[var(--dos-gray)]">
           PROJECTS:<b className="text-[var(--dos-white)]"> {totalCount}</b>
         </span>
-        <span className="text-[var(--dos-gray)]">
+        <span className="text-xs tracking-[0.1em] text-[var(--dos-gray)]">
           LIVE:<b style={{ color: "var(--dos-green)" }}> {liveCount}</b>
         </span>
       </div>
@@ -206,11 +206,11 @@ function LaneSection({
   return (
     <section>
       <div
-        className="dos-bar flex items-center gap-2 px-3 py-1.5 text-sm font-bold tracking-wider"
+        className="dos-bar flex items-center gap-2 px-3 py-1.5 text-xs font-bold tracking-[0.22em]"
         style={{ background: LANE_COLOR[lane] }}
       >
         <span>■ {LANE_LABEL[lane]}</span>
-        <span className="ml-auto font-normal opacity-80">{cards.length}</span>
+        <span className="ml-auto opacity-70">{cards.length}</span>
       </div>
 
       {cards.length === 0 ? (
@@ -246,7 +246,7 @@ function ProjectCard({
     <div className="dos-box">
       {/* Title bar */}
       <div className="dos-bar flex items-center gap-2 px-3 py-1">
-        <span className="glow min-w-0 flex-1 truncate font-bold">{card.name}</span>
+        <span className="glow min-w-0 flex-1 truncate font-bold uppercase tracking-wide">{card.name}</span>
         {h ? (
           <span
             className="shrink-0 px-1 text-xs font-bold tracking-wide"
@@ -265,7 +265,7 @@ function ProjectCard({
       </div>
 
       {/* Body */}
-      <div className="flex flex-col gap-2 px-3 py-2">
+      <div className="flex flex-col gap-1.5 px-3 py-2">
         {card.description && (
           <p
             className="text-xs leading-relaxed text-[var(--dos-gray)]"
@@ -280,12 +280,16 @@ function ProjectCard({
           </p>
         )}
 
-        <div className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11px]">
-          {card.version && (
-            <span className="text-[var(--dos-cyan)]">{card.version}</span>
+        <div className="flex items-center gap-1 text-[10px]">
+          {card.version && <span className="text-[var(--dos-cyan)]">{card.version}</span>}
+          {card.version && ((card.lastCommit && now > 0) || !!card.backlog) && (
+            <span className="text-[var(--dos-gray)] opacity-30">·</span>
           )}
           {card.lastCommit && now > 0 && (
             <span className="text-[var(--dos-gray)]">{timeAgo(card.lastCommit)}</span>
+          )}
+          {card.lastCommit && now > 0 && !!card.backlog && (
+            <span className="text-[var(--dos-gray)] opacity-30">·</span>
           )}
           {!!card.backlog && (
             <span style={{ color: "var(--dos-amber)" }}>{card.backlog} backlog</span>
@@ -298,7 +302,7 @@ function ProjectCard({
               href={card.liveUrl}
               target="_blank"
               rel="noreferrer"
-              className="dos-bar px-2 py-0.5 text-xs font-bold hover:opacity-80"
+              className="dos-bar px-2 py-0.5 text-xs font-bold tracking-[0.08em] hover:opacity-80"
             >
               LAUNCH ▶
             </a>
@@ -308,7 +312,7 @@ function ProjectCard({
               href={card.repoUrl}
               target="_blank"
               rel="noreferrer"
-              className="px-2 py-0.5 text-xs text-[var(--dos-cyan)] hover:text-[var(--dos-cyan-bright)]"
+              className="px-2 py-0.5 text-xs tracking-[0.08em] text-[var(--dos-cyan)] hover:text-[var(--dos-cyan-bright)]"
               style={{ border: "1px solid var(--dos-cyan)" }}
             >
               GITHUB ↗
@@ -332,9 +336,11 @@ function StatusBar({
   now: number;
 }) {
   return (
-    <footer className="dos-bar mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-1 text-xs font-bold tracking-wide">
+    <footer className="dos-bar mt-4 flex items-center px-3 py-1 text-xs font-bold tracking-[0.1em]">
       <span>AUTO-REFRESH 8s</span>
+      <span className="mx-3 opacity-40">│</span>
       <span>{totalCount} PROJECTS</span>
+      <span className="mx-3 opacity-40">│</span>
       <span style={{ color: "var(--dos-green)" }}>{liveCount} LIVE</span>
       <span className="ml-auto">
         {now
