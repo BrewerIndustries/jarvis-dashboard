@@ -62,30 +62,6 @@ body {
   color: var(--dos-bg-deep);
 }
 
-/* CRT overlay: scanlines + subtle vignette, non-interactive */
-.crt::before {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 60;
-  pointer-events: none;
-  background: repeating-linear-gradient(
-    to bottom,
-    rgba(0, 0, 0, 0) 0px,
-    rgba(0, 0, 0, 0) 2px,
-    rgba(0, 0, 0, 0.16) 3px,
-    rgba(0, 0, 0, 0) 4px
-  );
-  mix-blend-mode: multiply;
-}
-.crt::after {
-  content: "";
-  position: fixed;
-  inset: 0;
-  z-index: 61;
-  pointer-events: none;
-  background: radial-gradient(120% 110% at 50% 50%, transparent 60%, rgba(0, 0, 0, 0.45) 100%);
-}
 
 /* Blinking block cursor */
 @keyframes dos-blink {
