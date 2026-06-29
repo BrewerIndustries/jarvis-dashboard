@@ -32,6 +32,7 @@ const REPOS = [
   "tessera",
   "tessera-court-mock",
   "tessera-dems-mock",
+  "historic-map",
 ];
 
 // Fallback for the declared fields only (id/category/status/deploy) when a repo has
@@ -50,6 +51,7 @@ const DEFAULTS = {
   tessera: { id: "tessera", category: "apps", status: { prod: "in_progress", dev: "in_progress" } },
   "tessera-court-mock": { id: "court-mock", category: "apps", status: { prod: "in_progress", dev: "in_progress" } },
   "tessera-dems-mock": { id: "dems-mock", category: "apps", status: { prod: "in_progress", dev: "in_progress" } },
+  "historic-map": { id: "historic-map", category: "standalone", status: { prod: "live", dev: "live" }, deploy: { prod: { url: "https://historic-map.dabrewer.dev/" }, dev: { url: "https://historic-map.dabrewer.dev/dev/" } } },
 };
 
 const TOKEN = process.env.GITHUB_TOKEN;
