@@ -6,24 +6,27 @@ export const dynamic = "force-dynamic";
 
 const JARVIS_URL = process.env.JARVIS_URL ?? "https://localhost:8080";
 
-// Jarvis uses a self-signed TLS cert — skip verification for localhost calls only.
-const agent = new https.Agent({ rejectUnauthorized: false });
-
-async function fetchJson(url: string) {
-  const res = await fetch(url, {
-    signal: AbortSignal.timeout(4000),
-    // @ts-expect-error — Next.js Node runtime accepts the agent option
-    agent: url.startsWith("https") ? agent : undefined,
+// Jarvis uses a self-signed cert — skip verification for this localhost-only proxy.
+function httpsGet(url: string): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error("timeout")), 4000);
+    https.get(url, { rejectUnauthorized: false }, (res) => {
+      const chunks: Buffer[] = [];
+      res.on("data", (c: Buffer) => chunks.push(c));
+      res.on("end", () => {
+        clearTimeout(timer);
+        try { resolve(JSON.parse(Buffer.concat(chunks).toString())); }
+        catch (e) { reject(e); }
+      });
+    }).on("error", (e) => { clearTimeout(timer); reject(e); });
   });
-  if (!res.ok) throw new Error(`${res.status}`);
-  return res.json();
 }
 
 export async function GET() {
   try {
     const [status, logs] = await Promise.all([
-      fetchJson(`${JARVIS_URL}/api/health`),
-      fetchJson(`${JARVIS_URL}/api/health/logs?n=80`),
+      httpsGet(`${JARVIS_URL}/api/health`),
+      httpsGet(`${JARVIS_URL}/api/health/logs?n=80`),
     ]);
     return NextResponse.json(
       { ok: true, status, logs },
