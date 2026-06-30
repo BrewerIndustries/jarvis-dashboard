@@ -68,6 +68,11 @@ function sortCards(cards: Card[]): Card[] {
 
 // --- main --------------------------------------------------------------------
 
+const ENV_URLS: Record<string, { label: string; url: string }> = {
+  dev: { label: "→ PROD", url: "http://100.102.159.57:4500" },
+  prod: { label: "→ DEV", url: "http://100.102.159.57:4510" },
+};
+
 export default function Dashboard({ env }: { env?: string | null }) {
   const [cards, setCards] = useState<Card[]>([]);
   const [health, setHealth] = useState<HealthMap>({});
@@ -121,7 +126,7 @@ export default function Dashboard({ env }: { env?: string | null }) {
       {env && <EnvBanner env={env} />}
       <div className="px-3 py-4 sm:px-6 sm:py-6">
         <div className="mx-auto max-w-[1600px]">
-          <Header liveCount={liveCount} totalCount={totalCount} />
+          <Header liveCount={liveCount} totalCount={totalCount} env={env} />
 
           <main className="mt-6 flex flex-col gap-8">
             {loading ? (
@@ -168,12 +173,22 @@ function EnvBanner({ env }: { env: string }) {
 
 // --- header ------------------------------------------------------------------
 
-function Header({ liveCount, totalCount }: { liveCount: number; totalCount: number }) {
+function Header({ liveCount, totalCount, env }: { liveCount: number; totalCount: number; env?: string | null }) {
+  const envLink = env ? ENV_URLS[env.toLowerCase()] : ENV_URLS["prod"];
   return (
     <header className="dos-box">
       <div className="dos-bar flex items-center gap-2 px-3 py-1 text-xs font-bold tracking-[0.15em]">
         <span>▓▒░</span>
         <span>JARVIS.SYS — PROJECT CONTROL</span>
+        {envLink && (
+          <a
+            href={envLink.url}
+            className="ml-auto text-xs font-bold tracking-[0.1em] opacity-70 hover:opacity-100"
+            style={{ color: "var(--dos-cyan)" }}
+          >
+            {envLink.label}
+          </a>
+        )}
       </div>
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-3 py-2">
         <span className="glow font-bold tracking-[0.2em] text-[var(--dos-cyan-bright)]">
