@@ -1,12 +1,20 @@
 import { NextResponse } from "next/server";
+import https from "node:https";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const JARVIS_URL = process.env.JARVIS_URL ?? "http://localhost:8080";
+const JARVIS_URL = process.env.JARVIS_URL ?? "https://localhost:8080";
+
+// Jarvis uses a self-signed TLS cert — skip verification for localhost calls only.
+const agent = new https.Agent({ rejectUnauthorized: false });
 
 async function fetchJson(url: string) {
-  const res = await fetch(url, { signal: AbortSignal.timeout(4000) });
+  const res = await fetch(url, {
+    signal: AbortSignal.timeout(4000),
+    // @ts-expect-error — Next.js Node runtime accepts the agent option
+    agent: url.startsWith("https") ? agent : undefined,
+  });
   if (!res.ok) throw new Error(`${res.status}`);
   return res.json();
 }
