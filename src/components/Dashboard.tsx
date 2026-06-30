@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Lane } from "@/lib/registry";
 
 // --- types -------------------------------------------------------------------
@@ -19,6 +19,15 @@ interface Card {
 }
 
 type HealthMap = Record<string, { state: string; ms?: number }>;
+
+interface SystemHealth {
+  disk: { pct: number; free_gb: number; ok: boolean };
+  mem: { pct: number; ok: boolean };
+  services: Record<string, boolean>;
+  containers: Record<string, boolean>;
+}
+
+type View = "projects" | "health";
 
 // --- constants ---------------------------------------------------------------
 
@@ -68,7 +77,13 @@ function sortCards(cards: Card[]): Card[] {
 
 // --- main --------------------------------------------------------------------
 
+const ENV_URLS: Record<string, { label: string; url: string }> = {
+  dev: { label: "→ PROD", url: "http://100.102.159.57:4500" },
+  prod: { label: "→ DEV", url: "http://100.102.159.57:4510" },
+};
+
 export default function Dashboard({ env }: { env?: string | null }) {
+  const [view, setView] = useState<View>("projects");
   const [cards, setCards] = useState<Card[]>([]);
   const [health, setHealth] = useState<HealthMap>({});
   const [loading, setLoading] = useState(true);
@@ -121,10 +136,12 @@ export default function Dashboard({ env }: { env?: string | null }) {
       {env && <EnvBanner env={env} />}
       <div className="px-3 py-4 sm:px-6 sm:py-6">
         <div className="mx-auto max-w-[1600px]">
-          <Header liveCount={liveCount} totalCount={totalCount} />
+          <Header liveCount={liveCount} totalCount={totalCount} env={env} view={view} onViewChange={setView} />
 
           <main className="mt-6 flex flex-col gap-8">
-            {loading ? (
+            {view === "health" ? (
+              <HealthTab />
+            ) : loading ? (
               <p className="px-1 text-[var(--dos-gray)]">
                 C:\JARVIS&gt; loading<span className="cursor" />
               </p>
@@ -168,12 +185,34 @@ function EnvBanner({ env }: { env: string }) {
 
 // --- header ------------------------------------------------------------------
 
-function Header({ liveCount, totalCount }: { liveCount: number; totalCount: number }) {
+function Header({
+  liveCount,
+  totalCount,
+  env,
+  view,
+  onViewChange,
+}: {
+  liveCount: number;
+  totalCount: number;
+  env?: string | null;
+  view: View;
+  onViewChange: (v: View) => void;
+}) {
+  const envLink = env ? ENV_URLS[env.toLowerCase()] : ENV_URLS["prod"];
   return (
     <header className="dos-box">
       <div className="dos-bar flex items-center gap-2 px-3 py-1 text-xs font-bold tracking-[0.15em]">
         <span>▓▒░</span>
         <span>JARVIS.SYS — PROJECT CONTROL</span>
+        {envLink && (
+          <a
+            href={envLink.url}
+            className="ml-auto text-xs font-bold tracking-[0.1em] opacity-70 hover:opacity-100"
+            style={{ color: "var(--dos-cyan)" }}
+          >
+            {envLink.label}
+          </a>
+        )}
       </div>
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2 px-3 py-2">
         <span className="glow font-bold tracking-[0.2em] text-[var(--dos-cyan-bright)]">
@@ -185,8 +224,188 @@ function Header({ liveCount, totalCount }: { liveCount: number; totalCount: numb
         <span className="text-xs tracking-[0.1em] text-[var(--dos-gray)]">
           LIVE:<b style={{ color: "var(--dos-green)" }}> {liveCount}</b>
         </span>
+        <div className="ml-auto flex gap-1">
+          {(["projects", "health"] as View[]).map((v) => (
+            <button
+              key={v}
+              onClick={() => onViewChange(v)}
+              className="px-2 py-0.5 text-xs font-bold tracking-[0.1em] uppercase"
+              style={{
+                border: "1px solid var(--dos-cyan)",
+                color: view === v ? "var(--dos-bg-deep)" : "var(--dos-cyan)",
+                background: view === v ? "var(--dos-cyan)" : "transparent",
+              }}
+            >
+              {v}
+            </button>
+          ))}
+        </div>
       </div>
     </header>
+  );
+}
+
+// --- health tab --------------------------------------------------------------
+
+function HealthTab() {
+  const [data, setData] = useState<{ status: SystemHealth; logs: string[] } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/system-health", { cache: "no-store" });
+      const json = await res.json();
+      if (!json.ok) throw new Error(json.error ?? "upstream error");
+      setData({ status: json.status, logs: json.logs ?? [] });
+      setError(null);
+      setLastUpdated(new Date());
+    } catch (e) {
+      setError(String(e));
+    }
+    timerRef.current = setTimeout(load, 30000);
+  }, []);
+
+  useEffect(() => {
+    load();
+    return () => { if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [load]);
+
+  if (error) {
+    return (
+      <div className="dos-box px-4 py-3 text-sm" style={{ color: "var(--dos-red)" }}>
+        JARVIS UNREACHABLE — {error}
+      </div>
+    );
+  }
+
+  if (!data) {
+    return (
+      <p className="px-1 text-[var(--dos-gray)]">
+        C:\JARVIS\HEALTH&gt; loading<span className="cursor" />
+      </p>
+    );
+  }
+
+  const { status: s, logs } = data;
+
+  return (
+    <div className="flex flex-col gap-4">
+      {/* Metrics row */}
+      <div className="grid gap-3" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}>
+        <MetricCard title="Disk" pct={s.disk.pct} label={`${s.disk.pct}% — ${s.disk.free_gb} GB free`} ok={s.disk.ok} warnAt={80} critAt={90} />
+        <MetricCard title="Memory" pct={s.mem.pct} label={`${s.mem.pct}%`} ok={s.mem.ok} warnAt={90} critAt={95} />
+        <DotsCard title="Services" items={s.services} />
+        <DotsCard title="Docker" items={s.containers} />
+      </div>
+
+      {/* Log */}
+      <div className="dos-box">
+        <div className="dos-bar flex items-center gap-2 px-3 py-1 text-xs font-bold tracking-[0.15em]">
+          <span>■ HEALTH LOG</span>
+          {lastUpdated && (
+            <span className="ml-auto font-normal opacity-60">
+              updated {lastUpdated.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+            </span>
+          )}
+        </div>
+        <div
+          className="px-3 py-2 font-mono text-[10px] leading-relaxed"
+          style={{
+            maxHeight: "340px",
+            overflowY: "auto",
+            color: "rgba(200,200,200,0.55)",
+          }}
+        >
+          {logs.length === 0 ? (
+            <span className="opacity-50">No log entries yet.</span>
+          ) : (
+            logs.map((line, i) => {
+              const isWarn = line.includes("WARN") || line.includes("ISSUE");
+              const isCrit = line.startsWith("  ISSUES");
+              return (
+                <div
+                  key={i}
+                  style={{
+                    color: isCrit
+                      ? "rgba(220,80,80,0.8)"
+                      : isWarn
+                      ? "#f90"
+                      : undefined,
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-all",
+                  }}
+                >
+                  {line}
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MetricCard({
+  title,
+  pct,
+  label,
+  ok,
+  warnAt,
+  critAt,
+}: {
+  title: string;
+  pct: number;
+  label: string;
+  ok: boolean;
+  warnAt: number;
+  critAt: number;
+}) {
+  const barColor = pct >= critAt ? "var(--dos-red)" : pct >= warnAt ? "var(--dos-amber)" : "var(--dos-green)";
+  return (
+    <div
+      className="dos-box px-3 py-2"
+      style={!ok ? { borderColor: "rgba(180,30,30,0.5)" } : undefined}
+    >
+      <div className="mb-1.5 text-[9px] font-bold uppercase tracking-[0.15em] text-[var(--dos-gray)]">{title}</div>
+      <div className="text-sm font-bold" style={{ color: ok ? "var(--dos-white)" : "var(--dos-red)" }}>
+        {label}
+      </div>
+      <div className="mt-2 h-[3px] overflow-hidden rounded" style={{ background: "rgba(255,255,255,0.06)" }}>
+        <div
+          className="h-full rounded transition-all duration-500"
+          style={{ width: `${Math.min(pct, 100)}%`, background: barColor }}
+        />
+      </div>
+    </div>
+  );
+}
+
+function DotsCard({ title, items }: { title: string; items: Record<string, boolean> }) {
+  const hasIssue = Object.values(items).some((ok) => !ok);
+  return (
+    <div
+      className="dos-box px-3 py-2"
+      style={hasIssue ? { borderColor: "rgba(180,30,30,0.5)" } : undefined}
+    >
+      <div className="mb-2 text-[9px] font-bold uppercase tracking-[0.15em] text-[var(--dos-gray)]">{title}</div>
+      <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+        {Object.entries(items).map(([name, ok]) => (
+          <div key={name} className="flex items-center gap-1.5 text-[11px]" style={{ color: "rgba(200,200,200,0.7)" }}>
+            <span
+              className="inline-block h-[7px] w-[7px] shrink-0 rounded-full"
+              style={{ background: ok ? "var(--dos-green)" : "var(--dos-red)" }}
+            />
+            {name}
+          </div>
+        ))}
+        {Object.keys(items).length === 0 && (
+          <span className="text-[10px] opacity-40">none</span>
+        )}
+      </div>
+    </div>
   );
 }
 
