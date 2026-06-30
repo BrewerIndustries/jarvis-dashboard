@@ -32,6 +32,8 @@ const REPOS = [
   "tessera",
   "tessera-court-mock",
   "tessera-dems-mock",
+  "historic-map",
+  "dans-recipes",
 ];
 
 // Fallback for the declared fields only (id/category/status/deploy) when a repo has
@@ -41,6 +43,7 @@ const DEFAULTS = {
   "jarvis-launcher": { id: "launcher", category: "jarvis-tools", status: { prod: "live", dev: "live" }, deploy: { prod: { port: 4400 }, dev: { port: 4410 } } },
   "jarvis-timer": { id: "jarvis-timer", category: "standalone", status: { prod: "live", dev: "live" }, deploy: { prod: { url: "https://jarvis-timer.dabrewer.dev/" }, dev: { url: "https://jarvis-timer.dabrewer.dev/dev/" } } },
   "jarvis-jams": { id: "jarvis-jams", category: "standalone", status: { prod: "live", dev: "live" }, deploy: { prod: { url: "https://jarvis-jams.dabrewer.dev/" }, dev: { url: "https://jarvis-jams.dabrewer.dev/dev/" } } },
+  "dans-recipes": { id: "dans-recipes", category: "standalone", status: { prod: "live", dev: "live" }, deploy: { prod: { url: "https://dans-recipes.dabrewer.dev/" }, dev: { url: "https://dans-recipes.dabrewer.dev/dev/" } } },
   "idea-log": { id: "idea-log", category: "standalone", status: { prod: "live", dev: "live" }, deploy: { prod: { port: 4660 }, dev: { port: 4670 } } },
   Jarvis: { id: "voice", subdomain: "jarvis", category: "jarvis-tools", status: { prod: "live", dev: "live" }, deploy: { prod: { port: 8080, https: true }, dev: { port: 8090, https: true } } },
   spacebaserace: { id: "spacebaserace", category: "games", status: { prod: "live", dev: "live" }, deploy: { prod: { url: "https://spacebaserace.dabrewer.dev/" }, dev: { url: "https://spacebaserace.dabrewer.dev/dev/" } } },
@@ -50,6 +53,7 @@ const DEFAULTS = {
   tessera: { id: "tessera", category: "apps", status: { prod: "in_progress", dev: "in_progress" } },
   "tessera-court-mock": { id: "court-mock", category: "apps", status: { prod: "in_progress", dev: "in_progress" } },
   "tessera-dems-mock": { id: "dems-mock", category: "apps", status: { prod: "in_progress", dev: "in_progress" } },
+  "historic-map": { id: "historic-map", category: "standalone", status: { prod: "live", dev: "live" }, deploy: { prod: { url: "https://historic-map.dabrewer.dev/" }, dev: { url: "https://historic-map.dabrewer.dev/dev/" } } },
 };
 
 const TOKEN = process.env.GITHUB_TOKEN;
