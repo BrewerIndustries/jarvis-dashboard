@@ -45,6 +45,7 @@ export function computePalette(): AmbientPalette {
 }
 
 export function applyPalette(p: AmbientPalette) {
+  document.documentElement.style.colorScheme = p.base === LIGHT.base ? 'light' : 'dark';
   const r = document.documentElement.style;
   r.setProperty("--base",          p.base);
   r.setProperty("--surface",       p.surface);
