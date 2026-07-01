@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Lane } from "@/lib/registry";
+import { applyPalette, computePalette } from "@/lib/ambientTheme";
 
 // --- types -------------------------------------------------------------------
 
@@ -87,7 +88,16 @@ const ENV_URLS: Record<string, { label: string; url: string }> = {
 
 // --- main --------------------------------------------------------------------
 
+function useAmbientTheme() {
+  useEffect(() => {
+    applyPalette(computePalette());
+    const t = setInterval(() => applyPalette(computePalette()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+}
+
 export default function Dashboard({ env }: { env?: string | null }) {
+  useAmbientTheme();
   const [view, setView] = useState<View>("projects");
   const [cards, setCards] = useState<Card[]>([]);
   const [health, setHealth] = useState<HealthMap>({});
