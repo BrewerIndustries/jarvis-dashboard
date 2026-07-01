@@ -25,7 +25,9 @@
 }
 
 html, body {
-  background: var(--base);
+  background:
+    radial-gradient(ellipse 140% 55% at 50% -5%, var(--sky, rgba(14,8,48,0.30)) 0%, transparent 65%),
+    var(--base, #07070f);
   color: var(--text);
   font-family: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont,
     "Segoe UI", sans-serif;
