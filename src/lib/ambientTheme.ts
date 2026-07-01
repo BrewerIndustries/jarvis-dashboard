@@ -1,107 +1,116 @@
 // Ambient time-of-day theme engine.
-// Interpolates CSS custom properties across named time stops.
+// Interpolates CSS custom properties across named time stops, updated every 60s.
 // Applied to :root every minute by useAmbientTheme().
 
 interface Stop {
-  h: number;           // hour (0–24, 24 wraps to 0)
-  accent: string;      // --indigo-bright
-  accentMid: string;   // --indigo
-  accentDim: string;   // --indigo-dim (rgba)
-  base: string;        // --base  (background)
-  textAlpha: number;   // --text  (rgba alpha 0–1)
+  h: number;
+  accent:    string; // --indigo-bright
+  accentMid: string; // --indigo
+  accentDim: string; // --indigo-dim
+  base:      string; // --base
+  sky:       string; // rgba overlay on body gradient — the most visible signal
+  textAlpha: number;
 }
 
-// Named palette stops throughout the day
 const STOPS: Stop[] = [
   {
     h: 0,
-    accent:    "#6858b8",
-    accentMid: "#4c42a0",
-    accentDim: "rgba(88,72,160,0.13)",
-    base:      "#080810",
-    textAlpha: 0.58,
+    accent:    "#5848b0",
+    accentMid: "#3c2e90",
+    accentDim: "rgba(68,52,140,0.13)",
+    base:      "#070710",
+    sky:       "rgba(18,8,55,0.22)",
+    textAlpha: 0.55,
   },
   {
     h: 5,
-    accent:    "#7868c8",
-    accentMid: "#5c50b0",
-    accentDim: "rgba(100,88,180,0.14)",
-    base:      "#09091a",
-    textAlpha: 0.62,
+    accent:    "#6070d0",
+    accentMid: "#4450b0",
+    accentDim: "rgba(80,80,180,0.14)",
+    base:      "#080a18",
+    sky:       "rgba(20,30,90,0.18)",
+    textAlpha: 0.60,
   },
   {
     h: 8,
-    accent:    "#9080e8",
-    accentMid: "#7060cc",
-    accentDim: "rgba(110,90,200,0.15)",
-    base:      "#0b0b14",
-    textAlpha: 0.72,
+    // Morning: noticeably cool blue — clearly different from noon purple
+    accent:    "#7aaeff",
+    accentMid: "#5888e0",
+    accentDim: "rgba(90,130,220,0.16)",
+    base:      "#090c18",
+    sky:       "rgba(30,55,140,0.12)",
+    textAlpha: 0.70,
   },
   {
     h: 12,
-    // Peak brightness — crisp cool white-blue
+    // Noon: peak brightness, classic indigo
     accent:    "#a090ff",
     accentMid: "#7864dc",
     accentDim: "rgba(120,100,220,0.16)",
     base:      "#0d0d18",
+    sky:       "rgba(60,40,120,0.06)",
     textAlpha: 0.85,
   },
   {
     h: 15,
     // Warm shift begins
-    accent:    "#c8a860",
-    accentMid: "#a07830",
-    accentDim: "rgba(180,140,60,0.14)",
-    base:      "#0d0b14",
+    accent:    "#d4aa50",
+    accentMid: "#b08830",
+    accentDim: "rgba(190,150,50,0.15)",
+    base:      "#0e0c12",
+    sky:       "rgba(150,110,20,0.09)",
     textAlpha: 0.82,
   },
   {
     h: 17,
-    // Golden hour — warm gold
-    accent:    "#e8b828",
-    accentMid: "#c09018",
-    accentDim: "rgba(210,160,20,0.14)",
-    base:      "#0f0c10",
+    // Golden hour
+    accent:    "#f0c030",
+    accentMid: "#c89010",
+    accentDim: "rgba(220,170,20,0.16)",
+    base:      "#100d0e",
+    sky:       "rgba(210,150,10,0.14)",
     textAlpha: 0.80,
   },
   {
     h: 19,
     // Sunset — deep amber
-    accent:    "#d07030",
-    accentMid: "#a05020",
-    accentDim: "rgba(190,90,30,0.14)",
-    base:      "#0d0a0c",
+    accent:    "#e07030",
+    accentMid: "#b85010",
+    accentDim: "rgba(200,90,30,0.15)",
+    base:      "#0e0b0b",
+    sky:       "rgba(190,80,15,0.14)",
     textAlpha: 0.73,
   },
   {
     h: 21,
-    // Dusk — settling purples
-    accent:    "#9060b8",
-    accentMid: "#6840a0",
-    accentDim: "rgba(120,60,170,0.14)",
-    base:      "#0a0910",
+    // Dusk — settling purple
+    accent:    "#9060c0",
+    accentMid: "#6840a8",
+    accentDim: "rgba(120,60,180,0.14)",
+    base:      "#0b090f",
+    sky:       "rgba(90,30,110,0.14)",
     textAlpha: 0.65,
   },
   {
     h: 23,
-    // Night — deep indigo, dim
-    accent:    "#7060a8",
-    accentMid: "#504090",
-    accentDim: "rgba(88,64,150,0.13)",
+    accent:    "#6858b0",
+    accentMid: "#4840a0",
+    accentDim: "rgba(80,60,150,0.13)",
     base:      "#080810",
-    textAlpha: 0.60,
+    sky:       "rgba(18,8,55,0.20)",
+    textAlpha: 0.58,
   },
   {
-    h: 24, // wraps to 0
-    accent:    "#6858b8",
-    accentMid: "#4c42a0",
-    accentDim: "rgba(88,72,160,0.13)",
-    base:      "#080810",
-    textAlpha: 0.58,
+    h: 24,
+    accent:    "#5848b0",
+    accentMid: "#3c2e90",
+    accentDim: "rgba(68,52,140,0.13)",
+    base:      "#070710",
+    sky:       "rgba(18,8,55,0.22)",
+    textAlpha: 0.55,
   },
 ];
 
-// Interpolate 0–1 between two hex colors
 function hexLerp(a: string, b: string, t: number): string {
   const parse = (h: string) => {
     const x = parseInt(h.replace("#", ""), 16);
@@ -113,18 +122,12 @@ function hexLerp(a: string, b: string, t: number): string {
   return `#${[lerp(ar, br), lerp(ag, bg), lerp(ab, bb)].map(v => v.toString(16).padStart(2, "0")).join("")}`;
 }
 
-// Parse rgba(r,g,b,a) into components, lerp, reserialize
 function rgbaLerp(a: string, b: string, t: number): string {
-  const parse = (s: string) =>
-    s.match(/[\d.]+/g)!.map(Number) as [number, number, number, number];
+  const parse = (s: string) => s.match(/[\d.]+/g)!.map(Number) as [number, number, number, number];
   const lerp = (x: number, y: number) => x + (y - x) * t;
   const [ar, ag, ab, aa] = parse(a);
   const [br, bg, bb, ba] = parse(b);
   return `rgba(${Math.round(lerp(ar, br))},${Math.round(lerp(ag, bg))},${Math.round(lerp(ab, bb))},${lerp(aa, ba).toFixed(2)})`;
-}
-
-function lerpNum(a: number, b: number, t: number) {
-  return a + (b - a) * t;
 }
 
 export interface AmbientPalette {
@@ -132,14 +135,14 @@ export interface AmbientPalette {
   accentMid: string;
   accentDim: string;
   base:      string;
+  sky:       string;
   textAlpha: number;
-  hourFrac:  number; // 0–24, for label
+  hourFrac:  number;
 }
 
 export function computePalette(date: Date = new Date()): AmbientPalette {
   const hourFrac = date.getHours() + date.getMinutes() / 60;
 
-  // Find surrounding stops
   let lo = STOPS[STOPS.length - 2];
   let hi = STOPS[STOPS.length - 1];
   for (let i = 0; i < STOPS.length - 1; i++) {
@@ -152,13 +155,15 @@ export function computePalette(date: Date = new Date()): AmbientPalette {
 
   const span = hi.h - lo.h || 1;
   const t = (hourFrac - lo.h) / span;
+  const ln = (a: number, b: number) => a + (b - a) * t;
 
   return {
     accent:    hexLerp(lo.accent,    hi.accent,    t),
     accentMid: hexLerp(lo.accentMid, hi.accentMid, t),
     accentDim: rgbaLerp(lo.accentDim, hi.accentDim, t),
     base:      hexLerp(lo.base,      hi.base,      t),
-    textAlpha: lerpNum(lo.textAlpha, hi.textAlpha, t),
+    sky:       rgbaLerp(lo.sky,      hi.sky,       t),
+    textAlpha: ln(lo.textAlpha, hi.textAlpha),
     hourFrac,
   };
 }
@@ -169,8 +174,8 @@ export function applyPalette(p: AmbientPalette) {
   r.setProperty("--indigo",        p.accentMid);
   r.setProperty("--indigo-dim",    p.accentDim);
   r.setProperty("--base",          p.base);
+  r.setProperty("--sky",           p.sky);
   r.setProperty("--text",          `rgba(255,255,255,${p.textAlpha.toFixed(2)})`);
-  // Derived muted/dim at fixed fractions of textAlpha
   r.setProperty("--text-dim",      `rgba(255,255,255,${(p.textAlpha * 0.46).toFixed(2)})`);
   r.setProperty("--text-muted",    `rgba(255,255,255,${(p.textAlpha * 0.27).toFixed(2)})`);
 }
