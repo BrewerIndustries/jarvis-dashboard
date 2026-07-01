@@ -65,6 +65,18 @@ const STOPS: BgStop[] = [
     sky:       "rgba(80,55,200,0.06)",
   },
   {
+    h: 14,  // 2pm — warm afternoon, still light
+    base:      "#f0e8cc",
+    surface:   "#fffbf0",
+    surface2:  "#fff8e8",
+    border:    "rgba(160,110,20,0.10)",
+    borderMid: "rgba(160,110,20,0.18)",
+    accent:    "#b87820",
+    accentMid: "#966010",
+    accentDim: "rgba(180,115,20,0.15)",
+    sky:       "rgba(200,150,20,0.08)",
+  },
+  {
     h: 16,  // 4pm — golden transition begins
     base:      "#1a1208",
     surface:   "#261a0c",
