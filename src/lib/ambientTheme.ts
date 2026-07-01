@@ -1,19 +1,19 @@
 // Two-mode theme: light (7am–8pm) and dark (8pm–7am).
-// No interpolation — snaps cleanly between modes.
+// Light palette sourced exactly from dans-recipes.dabrewer.dev
 
 const LIGHT = {
-  base:       "#f0ebe3",
+  base:       "#f9f7f4",
   surface:    "#ffffff",
-  surface2:   "#faf7f3",
-  border:     "rgba(44,24,16,0.08)",
-  borderMid:  "rgba(44,24,16,0.14)",
-  text:       "rgba(44,24,16,0.88)",
-  textDim:    "rgba(44,24,16,0.48)",
-  textMuted:  "rgba(44,24,16,0.30)",
-  accent:     "#5540cc",
-  accentMid:  "#4030b0",
-  accentDim:  "rgba(68,48,200,0.12)",
-  sky:        "rgba(80,55,200,0.05)",
+  surface2:   "#f0ebe4",
+  border:     "rgba(224,216,208,0.80)",
+  borderMid:  "rgba(224,216,208,1.00)",
+  text:       "rgba(26,26,26,0.90)",
+  textDim:    "rgba(102,102,102,0.90)",
+  textMuted:  "rgba(102,102,102,0.55)",
+  accent:     "#5c3d2e",
+  accentMid:  "#4a2e1e",
+  accentDim:  "rgba(92,61,46,0.12)",
+  sky:        "rgba(92,61,46,0.03)",
 };
 
 const DARK = {
