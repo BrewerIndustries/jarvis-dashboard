@@ -2,6 +2,8 @@
   "id": "dashboard",
   "name": "Jarvis Dashboard",
   "category": "jarvis-tools",
+  "description": "The single front door to the Jarvis server (absorbed the old Launcher) — a DOS-TUI-styled live card grid of every project, auto-populated from each repo's .jarvis.json via a cron GitHub-API sync, grouped by lifecycle lane with per-deployment health badges and launch links.",
+  "tech": ["Next.js 16", "React 19", "TypeScript", "Tailwind CSS v4", "GitHub API sync"],
   "status": { "prod": "live", "dev": "live" },
   "deploy": { "prod": { "port": 4500 }, "dev": { "port": 4510 } }
 }
