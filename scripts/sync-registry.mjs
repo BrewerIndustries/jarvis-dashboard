@@ -35,6 +35,7 @@ const REPOS = [
   "historic-map",
   "dans-recipes",
   "blobby",
+  "taco-loco",
 ];
 
 // Fallback for the declared fields only (id/category/status/deploy) when a repo has
@@ -56,6 +57,7 @@ const DEFAULTS = {
   "tessera-dems-mock": { id: "dems-mock", category: "apps", status: { prod: "in_progress", dev: "in_progress" } },
   "historic-map": { id: "historic-map", category: "standalone", status: { prod: "live", dev: "live" }, deploy: { prod: { url: "https://historic-map.dabrewer.dev/" }, dev: { url: "https://historic-map.dabrewer.dev/dev/" } } },
   "blobby": { id: "blobby", category: "games", status: { prod: "in_progress", dev: "live" }, deploy: { prod: { url: "https://blobby.dabrewer.dev/" }, dev: { url: "https://blobby.dabrewer.dev/dev/" } } },
+  "taco-loco": { id: "taco-loco", category: "games", status: { prod: "in_progress", dev: "live" }, deploy: { prod: { url: "https://tacoloco.dabrewer.dev/" }, dev: { url: "https://tacoloco.dabrewer.dev/dev/" } } },
 };
 
 const TOKEN = process.env.GITHUB_TOKEN;
