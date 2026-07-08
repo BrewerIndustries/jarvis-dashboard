@@ -29,6 +29,7 @@ const REPOS = [
   "spacebaserace",
   "Stellar-Ascent",
   "poker",
+  "jarvis-junction",
   "tessera",
   "tessera-court-mock",
   "tessera-dems-mock",
@@ -36,6 +37,7 @@ const REPOS = [
   "dans-recipes",
   "blobby",
   "taco-loco",
+  "brookeslist",
 ];
 
 // Fallback for the declared fields only (id/category/status/deploy) when a repo has
@@ -51,6 +53,7 @@ const DEFAULTS = {
   spacebaserace: { id: "spacebaserace", category: "games", status: { prod: "live", dev: "live" }, deploy: { prod: { url: "https://spacebaserace.dabrewer.dev/" }, dev: { url: "https://spacebaserace.dabrewer.dev/dev/" } } },
   "Stellar-Ascent": { id: "stellar-ascent", category: "games", status: { prod: "live", dev: "live" }, deploy: { prod: { url: "https://stellar-ascent.dabrewer.dev/" }, dev: { url: "https://stellar-ascent.dabrewer.dev/dev/" } } },
   poker: { id: "poker", category: "games", status: { prod: "live", dev: "live" }, deploy: { prod: { url: "https://poker.dabrewer.dev/" }, dev: { url: "https://poker.dabrewer.dev/dev/" } } },
+  "jarvis-junction": { id: "jarvis-junction", category: "games", status: { prod: "in_progress", dev: "live" }, deploy: { prod: { url: "https://jarvis-junction.dabrewer.dev/" }, dev: { url: "https://jarvis-junction.dabrewer.dev/dev/" } } },
   "bpt-2.0": { id: "bpt-2", category: "apps", status: "mothballed" },
   tessera: { id: "tessera", category: "apps", status: { prod: "in_progress", dev: "in_progress" } },
   "tessera-court-mock": { id: "court-mock", category: "apps", status: { prod: "in_progress", dev: "in_progress" } },
@@ -58,6 +61,7 @@ const DEFAULTS = {
   "historic-map": { id: "historic-map", category: "standalone", status: { prod: "live", dev: "live" }, deploy: { prod: { url: "https://historic-map.dabrewer.dev/" }, dev: { url: "https://historic-map.dabrewer.dev/dev/" } } },
   "blobby": { id: "blobby", category: "games", status: { prod: "in_progress", dev: "live" }, deploy: { prod: { url: "https://blobby.dabrewer.dev/" }, dev: { url: "https://blobby.dabrewer.dev/dev/" } } },
   "taco-loco": { id: "taco-loco", category: "games", status: { prod: "in_progress", dev: "live" }, deploy: { prod: { url: "https://tacoloco.dabrewer.dev/" }, dev: { url: "https://tacoloco.dabrewer.dev/dev/" } } },
+  "brookeslist": { id: "brookeslist", category: "standalone", status: { prod: "in_progress", dev: "in_progress" }, deploy: { prod: { url: "https://brookeslist.dabrewer.dev/" }, dev: { url: "https://brookeslist.dabrewer.dev/dev/" } } },
 };
 
 const TOKEN = process.env.GITHUB_TOKEN;
