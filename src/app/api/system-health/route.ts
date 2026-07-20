@@ -83,10 +83,56 @@ function detectGpu(): Promise<string | null> {
   });
 }
 
+// --- platform / runtime stack ------------------------------------------------
+// The software the projects run on (Node, Docker, nginx, …). Versions only change
+// on upgrade/redeploy, so detect once and cache for the process lifetime.
+
+interface PlatformItem { name: string; version: string }
+
+function osString(): string {
+  try {
+    const raw = readFileSync("/etc/os-release", "utf8");
+    const get = (k: string) => raw.match(new RegExp(`^${k}="?([^"\\n]+)"?`, "m"))?.[1] ?? "";
+    return [get("NAME"), get("VERSION_ID")].filter(Boolean).join(" ");
+  } catch { return ""; }
+}
+
+// systemd services get a minimal PATH; nginx/tailscale live in sbin — widen it.
+const VERSION_SCRIPT =
+  "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH; " +
+  'echo "docker|$(docker --version 2>/dev/null)"; ' +
+  'echo "nginx|$(nginx -v 2>&1)"; ' +
+  'echo "python|$(python3 --version 2>&1)"; ' +
+  'echo "tailscale|$(tailscale version 2>/dev/null | head -1)"';
+
+let platformCache: PlatformItem[] | undefined;
+function detectPlatform(): Promise<PlatformItem[]> {
+  if (platformCache !== undefined) return Promise.resolve(platformCache);
+  return new Promise((resolve) => {
+    exec(VERSION_SCRIPT, { timeout: 4000 }, (_err, stdout) => {
+      const raw: Record<string, string> = {};
+      for (const line of (stdout || "").split("\n")) {
+        const i = line.indexOf("|");
+        if (i > 0) raw[line.slice(0, i)] = line.slice(i + 1).trim();
+      }
+      const items: PlatformItem[] = [];
+      const push = (name: string, version: string) => { if (version) items.push({ name, version }); };
+      push("OS", osString());
+      push("Node", process.version.replace(/^v/, "")); // the runtime executing this code
+      push("Docker", (raw.docker?.match(/Docker version ([^,]+)/)?.[1] ?? "").trim());
+      push("nginx", (raw.nginx?.match(/nginx\/([0-9.]+)/)?.[1] ?? "").trim());
+      push("Python", (raw.python ?? "").replace(/^Python\s+/, "").trim());
+      push("Tailscale", (raw.tailscale ?? "").trim());
+      platformCache = items;
+      resolve(items);
+    });
+  });
+}
+
 async function hostInfo() {
   const cpus = os.cpus();
   const arch = os.arch();
-  const gpu = await detectGpu();
+  const [gpu, platform] = await Promise.all([detectGpu(), detectPlatform()]);
   return {
     mem: memInfo(),
     specs: {
@@ -95,6 +141,7 @@ async function hostInfo() {
       arch: arch === "x64" ? "x86_64" : arch,
       gpu,
     },
+    platform,
   };
 }
 

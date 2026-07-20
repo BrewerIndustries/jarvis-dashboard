@@ -31,6 +31,7 @@ interface SystemHealth {
 interface HostInfo {
   mem: { pct: number; used_gb: number; total_gb: number; ok: boolean };
   specs: { cpu: string; cores: number; arch: string; gpu: string | null };
+  platform: { name: string; version: string }[];
 }
 
 type View = "projects" | "health";
@@ -595,10 +596,13 @@ function HealthTab() {
           critAt={95}
         />
         {s ? <DotsCard title="Services" items={s.services} /> : <UnavailableCard title="Services" />}
-        {s ? <DotsCard title="Docker" items={s.containers} /> : <UnavailableCard title="Docker" />}
+        {s ? <DotsCard title="Containers" items={s.containers} /> : <UnavailableCard title="Containers" />}
       </div>
 
-      <SpecsCard specs={host.specs} totalRam={host.mem.total_gb} />
+      <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))" }}>
+        <SpecsCard specs={host.specs} totalRam={host.mem.total_gb} />
+        <PlatformCard items={host.platform} />
+      </div>
 
       {upstreamError && (
         <div className="card" style={{
@@ -730,6 +734,30 @@ function SpecsCard({ specs, totalRam }: { specs: HostInfo["specs"]; totalRam: nu
             </span>
             <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", letterSpacing: "0.01em" }}>
               {value}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function PlatformCard({ items }: { items: HostInfo["platform"] }) {
+  return (
+    <div className="card" style={{ padding: "14px 16px" }}>
+      <div style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)", marginBottom: 12 }}>
+        Platform
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "14px 30px" }}>
+        {items.length === 0 ? (
+          <span style={{ fontSize: 12, color: "var(--text-muted)" }}>unavailable</span>
+        ) : items.map(({ name, version }) => (
+          <div key={name} style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
+            <span style={{ fontSize: 9.5, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)" }}>
+              {name}
+            </span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", letterSpacing: "0.01em", fontVariantNumeric: "tabular-nums" }}>
+              {version}
             </span>
           </div>
         ))}
