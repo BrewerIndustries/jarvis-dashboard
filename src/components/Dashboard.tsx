@@ -610,7 +610,7 @@ function HealthTab() {
           warnAt={85}
           critAt={95}
         />
-        <UpdatesCard updates={host.updates} />
+        <UpdatesCard updates={host.updates} trackedOutdated={host.platform.filter((p) => p.outdated).length} />
         {s ? <DotsCard title="Services" items={s.services} /> : <UnavailableCard title="Services" />}
         {s ? <DotsCard title="Containers" items={s.containers} /> : <UnavailableCard title="Containers" />}
       </div>
@@ -831,7 +831,7 @@ function PlatformItemView({ it }: { it: PlatformItem }) {
   );
 }
 
-function UpdatesCard({ updates }: { updates: UpdateInfo | null }) {
+function UpdatesCard({ updates, trackedOutdated }: { updates: UpdateInfo | null; trackedOutdated: number }) {
   if (!updates) {
     return (
       <div className="card" style={{ padding: "14px 16px" }}>
@@ -862,6 +862,13 @@ function UpdatesCard({ updates }: { updates: UpdateInfo | null }) {
       <div style={{ fontSize: 18, fontWeight: 700, color, marginBottom: 8, letterSpacing: "-0.02em" }}>
         {upgradable === 0 ? "Up to date" : `${upgradable} available`}
       </div>
+      {upgradable > 0 && (
+        <div style={{ fontSize: 11, color: "var(--text-dim)", marginBottom: 6 }}>
+          <span style={{ color: trackedOutdated > 0 ? "var(--amber)" : undefined }}>{trackedOutdated} tracked</span>
+          <span style={{ color: "var(--border-mid)", margin: "0 6px" }}>·</span>
+          <span>{Math.max(upgradable - trackedOutdated, 0)} Ubuntu</span>
+        </div>
+      )}
       <div style={{ fontSize: 11, color: "var(--text-dim)", display: "flex", flexWrap: "wrap", gap: "2px 8px" }}>
         {parts.map((p, i) => (
           <span key={i} style={{ color: p.crit ? "var(--red)" : undefined }}>
