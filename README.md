@@ -35,6 +35,16 @@ Dashboard — card grid: LIVE / IN PROGRESS / MOTHBALLED
 | live URL    | `deploy[env].url` or derived from subdomain convention    |
 | health      | `/api/health` ping (any HTTP response = online)           |
 
+## Health tab
+
+A second view (header toggle) shows server health. `/api/system-health` gathers
+**host metrics locally** — the dashboard runs on the jarvis server, so RAM
+(`/proc/meminfo` `MemAvailable`, matching `free -h`) and hardware specs (CPU,
+cores, iGPU via `lspci`, arch) come straight from `os`/`/proc`. It also proxies
+the Jarvis core (`JARVIS_URL`) for disk, services, containers, and the health log.
+If the Jarvis core is unreachable, host metrics + specs still render; the
+core-dependent cards degrade to an "offline" state.
+
 ## `.jarvis.json` shape
 
 ```json
