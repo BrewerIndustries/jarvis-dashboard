@@ -42,10 +42,16 @@ A second view (header toggle) shows server health. `/api/system-health` gathers
 straight from `os`/`/proc`/shell:
 
 - **Memory** — RAM usage (`/proc/meminfo` `MemAvailable`, matching `free -h`).
+- **Updates** — pending apt updates, security count, and reboot-required
+  (`apt-check` + `/var/run/reboot-required`). Colors escalate green→amber→red.
 - **Host / Hardware** — CPU, cores, iGPU (via `lspci`), arch.
-- **Platform** — runtime/stack versions: OS, Node (`process.version`), Docker,
-  nginx, Python, Tailscale. Detected once and cached (they change only on
-  upgrade/redeploy); the shell call widens `PATH` so sbin tools resolve.
+- **Platform** — the full software stack, grouped Runtimes / Containers / Web-TLS
+  / Network / System: OS, kernel, Node, npm, Python, pip, Docker, nginx, certbot,
+  OpenSSL, Tailscale, ufw, git, systemd, bash. Each carries an **outdated flag**
+  from `apt list --upgradable` (local, no network) — an amber `▲ <version>` tag
+  when a newer package is available. The shell call widens `PATH` so sbin tools
+  resolve; results are cached with a 15-min TTL (apt state changes ~daily), so the
+  30s UI poll never reruns apt.
 
 It also proxies the Jarvis core (`JARVIS_URL`) for disk, services, **containers**,
 and the health log. If the Jarvis core is unreachable, the locally-gathered cards
