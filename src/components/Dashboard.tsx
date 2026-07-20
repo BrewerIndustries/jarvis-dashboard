@@ -615,7 +615,7 @@ function HealthTab() {
         {s ? <DotsCard title="Containers" items={s.containers} /> : <UnavailableCard title="Containers" />}
       </div>
 
-      <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))" }}>
+      <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", alignItems: "start" }}>
         <SpecsCard specs={host.specs} totalRam={host.mem.total_gb} />
         <PlatformCard items={host.platform} />
       </div>
