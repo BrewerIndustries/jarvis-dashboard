@@ -28,6 +28,27 @@ interface SystemHealth {
   containers: Record<string, boolean>;
 }
 
+interface PlatformItem {
+  name: string;
+  version: string;
+  group: string;
+  outdated: boolean;
+  latest?: string;
+}
+
+interface UpdateInfo {
+  upgradable: number;
+  security: number;
+  reboot: boolean;
+}
+
+interface HostInfo {
+  mem: { pct: number; used_gb: number; total_gb: number; ok: boolean };
+  specs: { cpu: string; cores: number; arch: string; gpu: string | null };
+  platform: PlatformItem[];
+  updates: UpdateInfo | null;
+}
+
 type View = "projects" | "health";
 
 // --- constants ---------------------------------------------------------------
@@ -521,7 +542,12 @@ function ProjectCard({ card, health, now }: {
 // --- health tab --------------------------------------------------------------
 
 function HealthTab() {
-  const [data, setData] = useState<{ status: SystemHealth; logs: string[] } | null>(null);
+  const [data, setData] = useState<{
+    status: SystemHealth | null;
+    logs: string[];
+    host: HostInfo;
+    upstreamError?: string;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -531,7 +557,12 @@ function HealthTab() {
       const res = await fetch("/api/system-health", { cache: "no-store" });
       const json = await res.json();
       if (!json.ok) throw new Error(json.error ?? "upstream error");
-      setData({ status: json.status, logs: json.logs ?? [] });
+      setData({
+        status: json.status ?? null,
+        logs: json.logs ?? [],
+        host: json.host,
+        upstreamError: json.upstreamError,
+      });
       setError(null);
       setLastUpdated(new Date());
     } catch (e) {
@@ -561,16 +592,42 @@ function HealthTab() {
     );
   }
 
-  const { status: s, logs } = data;
+  const { status: s, logs, host, upstreamError } = data;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}>
-        <MetricCard title="Disk" pct={s.disk.pct} label={`${s.disk.pct}% — ${s.disk.free_gb} GB free`} ok={s.disk.ok} warnAt={80} critAt={90} />
-        <MetricCard title="Memory" pct={s.mem.pct} label={`${s.mem.pct}%`} ok={s.mem.ok} warnAt={90} critAt={95} />
-        <DotsCard title="Services" items={s.services} />
-        <DotsCard title="Docker" items={s.containers} />
+        {s ? (
+          <MetricCard title="Disk" pct={s.disk.pct} label={`${s.disk.pct}% — ${s.disk.free_gb} GB free`} ok={s.disk.ok} warnAt={80} critAt={90} />
+        ) : (
+          <UnavailableCard title="Disk" />
+        )}
+        <MetricCard
+          title="Memory"
+          pct={host.mem.pct}
+          label={`${host.mem.pct}% — ${host.mem.used_gb} / ${host.mem.total_gb} GB`}
+          ok={host.mem.ok}
+          warnAt={85}
+          critAt={95}
+        />
+        <UpdatesCard updates={host.updates} />
+        {s ? <DotsCard title="Services" items={s.services} /> : <UnavailableCard title="Services" />}
+        {s ? <DotsCard title="Containers" items={s.containers} /> : <UnavailableCard title="Containers" />}
       </div>
+
+      <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", alignItems: "start" }}>
+        <SpecsCard specs={host.specs} totalRam={host.mem.total_gb} />
+        <PlatformCard items={host.platform} />
+      </div>
+
+      {upstreamError && (
+        <div className="card" style={{
+          padding: "10px 16px", fontSize: 11.5, color: "var(--amber)",
+          borderColor: "rgba(224,136,32,0.25)", letterSpacing: "0.02em",
+        }}>
+          Jarvis core unreachable — showing host metrics only (services, disk &amp; log unavailable).
+        </div>
+      )}
 
       {/* Log */}
       <div className="card" style={{ overflow: "hidden" }}>
@@ -666,6 +723,164 @@ function DotsCard({ title, items }: { title: string; items: Record<string, boole
           <span style={{ fontSize: 11, color: "var(--text-muted)" }}>none</span>
         )}
       </div>
+    </div>
+  );
+}
+
+// --- specs card --------------------------------------------------------------
+
+function SpecsCard({ specs, totalRam }: { specs: HostInfo["specs"]; totalRam: number }) {
+  const items: [string, string][] = [
+    ["CPU", specs.cpu],
+    ["Cores", String(specs.cores)],
+    ["iGPU", specs.gpu ?? "—"],
+    ["Arch", specs.arch],
+    ["Memory", `${totalRam} GB`],
+  ];
+  return (
+    <div className="card" style={{ padding: "14px 16px" }}>
+      <div style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)", marginBottom: 12 }}>
+        Host / Hardware
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "14px 30px" }}>
+        {items.map(([label, value]) => (
+          <div key={label} style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
+            <span style={{ fontSize: 9.5, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)" }}>
+              {label}
+            </span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", letterSpacing: "0.01em" }}>
+              {value}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const PLATFORM_GROUP_ORDER = ["Runtimes", "Containers", "Web/TLS", "Network", "System"];
+
+function PlatformCard({ items }: { items: PlatformItem[] }) {
+  const anyOutdated = items.some((i) => i.outdated);
+  const groups = PLATFORM_GROUP_ORDER
+    .map((g) => [g, items.filter((i) => i.group === g)] as const)
+    .filter(([, list]) => list.length > 0);
+
+  return (
+    <div className="card" style={{ padding: "14px 16px" }}>
+      <div style={{ display: "flex", alignItems: "center", marginBottom: 12 }}>
+        <span style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)" }}>
+          Platform
+        </span>
+        {anyOutdated && (
+          <span style={{ marginLeft: "auto", fontSize: 9.5, fontWeight: 600, color: "var(--amber)", letterSpacing: "0.04em" }}>
+            ▲ update available
+          </span>
+        )}
+      </div>
+
+      {groups.length === 0 ? (
+        <span style={{ fontSize: 12, color: "var(--text-muted)" }}>unavailable</span>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
+          {groups.map(([group, list]) => (
+            <div key={group}>
+              <div style={{ fontSize: 9, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.11em", color: "var(--text-muted)", opacity: 0.75, marginBottom: 7 }}>
+                {group}
+              </div>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: "12px 26px" }}>
+                {list.map((it) => <PlatformItemView key={it.name} it={it} />)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PlatformItemView({ it }: { it: PlatformItem }) {
+  return (
+    <div style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
+      <span style={{ fontSize: 9.5, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)" }}>
+        {it.name}
+      </span>
+      <span
+        title={it.outdated && it.latest ? `update available: ${it.latest}` : undefined}
+        style={{
+          display: "flex", alignItems: "center", gap: 5,
+          fontSize: 13, fontWeight: 600, letterSpacing: "0.01em",
+          fontVariantNumeric: "tabular-nums",
+          color: it.outdated ? "var(--amber)" : "var(--text)",
+        }}
+      >
+        {it.version}
+        {it.outdated && (
+          <span style={{
+            fontSize: 9, fontWeight: 700, color: "var(--amber)",
+            background: "rgba(224,136,32,0.12)",
+            border: "1px solid rgba(224,136,32,0.3)",
+            borderRadius: 4, padding: "0 4px",
+            letterSpacing: "0.02em", whiteSpace: "nowrap",
+          }}>
+            ▲{it.latest ? ` ${it.latest}` : ""}
+          </span>
+        )}
+      </span>
+    </div>
+  );
+}
+
+function UpdatesCard({ updates }: { updates: UpdateInfo | null }) {
+  if (!updates) {
+    return (
+      <div className="card" style={{ padding: "14px 16px" }}>
+        <div style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)", marginBottom: 8 }}>
+          Updates
+        </div>
+        <div style={{ fontSize: 12, color: "var(--text-muted)" }}>apt unavailable</div>
+      </div>
+    );
+  }
+
+  const { upgradable, security, reboot } = updates;
+  const crit = security > 0 || reboot;
+  const warn = upgradable > 0;
+  const color = crit ? "var(--red)" : warn ? "var(--amber)" : "var(--green)";
+  const border = crit ? "rgba(220,60,60,0.25)" : warn ? "rgba(224,136,32,0.25)" : undefined;
+
+  const parts: { text: string; crit?: boolean }[] = [];
+  if (security > 0) parts.push({ text: `${security} security`, crit: true });
+  if (reboot) parts.push({ text: "reboot required", crit: true });
+  if (parts.length === 0) parts.push({ text: upgradable > 0 ? "no security updates" : "system current" });
+
+  return (
+    <div className="card" style={{ padding: "14px 16px", borderColor: border }}>
+      <div style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)", marginBottom: 8 }}>
+        Updates
+      </div>
+      <div style={{ fontSize: 18, fontWeight: 700, color, marginBottom: 8, letterSpacing: "-0.02em" }}>
+        {upgradable === 0 ? "Up to date" : `${upgradable} available`}
+      </div>
+      <div style={{ fontSize: 11, color: "var(--text-dim)", display: "flex", flexWrap: "wrap", gap: "2px 8px" }}>
+        {parts.map((p, i) => (
+          <span key={i} style={{ color: p.crit ? "var(--red)" : undefined }}>
+            {i > 0 && <span style={{ color: "var(--border-mid)", marginRight: 8 }}>·</span>}
+            {p.text}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function UnavailableCard({ title }: { title: string }) {
+  return (
+    <div className="card" style={{ padding: "14px 16px", opacity: 0.55 }}>
+      <div style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)", marginBottom: 8 }}>
+        {title}
+      </div>
+      <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Jarvis core offline</div>
     </div>
   );
 }
