@@ -28,6 +28,11 @@ interface SystemHealth {
   containers: Record<string, boolean>;
 }
 
+interface HostInfo {
+  mem: { pct: number; used_gb: number; total_gb: number; ok: boolean };
+  specs: { cpu: string; cores: number; arch: string; gpu: string | null };
+}
+
 type View = "projects" | "health";
 
 // --- constants ---------------------------------------------------------------
@@ -521,7 +526,12 @@ function ProjectCard({ card, health, now }: {
 // --- health tab --------------------------------------------------------------
 
 function HealthTab() {
-  const [data, setData] = useState<{ status: SystemHealth; logs: string[] } | null>(null);
+  const [data, setData] = useState<{
+    status: SystemHealth | null;
+    logs: string[];
+    host: HostInfo;
+    upstreamError?: string;
+  } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -531,7 +541,12 @@ function HealthTab() {
       const res = await fetch("/api/system-health", { cache: "no-store" });
       const json = await res.json();
       if (!json.ok) throw new Error(json.error ?? "upstream error");
-      setData({ status: json.status, logs: json.logs ?? [] });
+      setData({
+        status: json.status ?? null,
+        logs: json.logs ?? [],
+        host: json.host,
+        upstreamError: json.upstreamError,
+      });
       setError(null);
       setLastUpdated(new Date());
     } catch (e) {
@@ -561,16 +576,38 @@ function HealthTab() {
     );
   }
 
-  const { status: s, logs } = data;
+  const { status: s, logs, host, upstreamError } = data;
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
       <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))" }}>
-        <MetricCard title="Disk" pct={s.disk.pct} label={`${s.disk.pct}% — ${s.disk.free_gb} GB free`} ok={s.disk.ok} warnAt={80} critAt={90} />
-        <MetricCard title="Memory" pct={s.mem.pct} label={`${s.mem.pct}%`} ok={s.mem.ok} warnAt={90} critAt={95} />
-        <DotsCard title="Services" items={s.services} />
-        <DotsCard title="Docker" items={s.containers} />
+        {s ? (
+          <MetricCard title="Disk" pct={s.disk.pct} label={`${s.disk.pct}% — ${s.disk.free_gb} GB free`} ok={s.disk.ok} warnAt={80} critAt={90} />
+        ) : (
+          <UnavailableCard title="Disk" />
+        )}
+        <MetricCard
+          title="Memory"
+          pct={host.mem.pct}
+          label={`${host.mem.pct}% — ${host.mem.used_gb} / ${host.mem.total_gb} GB`}
+          ok={host.mem.ok}
+          warnAt={85}
+          critAt={95}
+        />
+        {s ? <DotsCard title="Services" items={s.services} /> : <UnavailableCard title="Services" />}
+        {s ? <DotsCard title="Docker" items={s.containers} /> : <UnavailableCard title="Docker" />}
       </div>
+
+      <SpecsCard specs={host.specs} totalRam={host.mem.total_gb} />
+
+      {upstreamError && (
+        <div className="card" style={{
+          padding: "10px 16px", fontSize: 11.5, color: "var(--amber)",
+          borderColor: "rgba(224,136,32,0.25)", letterSpacing: "0.02em",
+        }}>
+          Jarvis core unreachable — showing host metrics only (services, disk &amp; log unavailable).
+        </div>
+      )}
 
       {/* Log */}
       <div className="card" style={{ overflow: "hidden" }}>
@@ -666,6 +703,48 @@ function DotsCard({ title, items }: { title: string; items: Record<string, boole
           <span style={{ fontSize: 11, color: "var(--text-muted)" }}>none</span>
         )}
       </div>
+    </div>
+  );
+}
+
+// --- specs card --------------------------------------------------------------
+
+function SpecsCard({ specs, totalRam }: { specs: HostInfo["specs"]; totalRam: number }) {
+  const items: [string, string][] = [
+    ["CPU", specs.cpu],
+    ["Cores", String(specs.cores)],
+    ["iGPU", specs.gpu ?? "—"],
+    ["Arch", specs.arch],
+    ["Memory", `${totalRam} GB`],
+  ];
+  return (
+    <div className="card" style={{ padding: "14px 16px" }}>
+      <div style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)", marginBottom: 12 }}>
+        Host / Hardware
+      </div>
+      <div style={{ display: "flex", flexWrap: "wrap", gap: "14px 30px" }}>
+        {items.map(([label, value]) => (
+          <div key={label} style={{ display: "flex", flexDirection: "column", gap: 3, minWidth: 0 }}>
+            <span style={{ fontSize: 9.5, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)" }}>
+              {label}
+            </span>
+            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--text)", letterSpacing: "0.01em" }}>
+              {value}
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function UnavailableCard({ title }: { title: string }) {
+  return (
+    <div className="card" style={{ padding: "14px 16px", opacity: 0.55 }}>
+      <div style={{ fontSize: 10, fontWeight: 600, textTransform: "uppercase", letterSpacing: "0.1em", color: "var(--text-muted)", marginBottom: 8 }}>
+        {title}
+      </div>
+      <div style={{ fontSize: 12, color: "var(--text-muted)" }}>Jarvis core offline</div>
     </div>
   );
 }
