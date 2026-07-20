@@ -83,48 +83,113 @@ function detectGpu(): Promise<string | null> {
   });
 }
 
-// --- platform / runtime stack ------------------------------------------------
-// The software the projects run on (Node, Docker, nginx, …). Versions only change
-// on upgrade/redeploy, so detect once and cache for the process lifetime.
+// --- platform / software stack -----------------------------------------------
+// The software the projects run on (runtimes, web/TLS, network, system). Versions
+// + apt "outdated" state change slowly, so detect and cache with a TTL.
 
-interface PlatformItem { name: string; version: string }
+interface PlatformItem { name: string; version: string; group: string; outdated: boolean; latest?: string }
+interface UpdateInfo { upgradable: number; security: number; reboot: boolean }
 
-function osString(): string {
-  try {
-    const raw = readFileSync("/etc/os-release", "utf8");
-    const get = (k: string) => raw.match(new RegExp(`^${k}="?([^"\\n]+)"?`, "m"))?.[1] ?? "";
-    return [get("NAME"), get("VERSION_ID")].filter(Boolean).join(" ");
-  } catch { return ""; }
-}
+// Each entry: display name, its raw key in the version dump, a regex to pull the
+// number out, the apt package(s) that signal "outdated", and a UI group.
+const SOFTWARE: {
+  name: string; key: string; re?: RegExp; pkgs?: string[]; group: string;
+}[] = [
+  { name: "OS",        key: "os",                                   group: "System" },
+  { name: "Kernel",    key: "kernel",  pkgs: ["linux-image-generic", "linux-generic"], group: "System" },
+  { name: "Node",      key: "__node",                               group: "Runtimes" },
+  { name: "npm",       key: "npm",                     pkgs: ["npm"],        group: "Runtimes" },
+  { name: "Python",    key: "python",  re: /([0-9]+\.[0-9]+\.[0-9]+)/, pkgs: ["python3"], group: "Runtimes" },
+  { name: "pip",       key: "pip",     re: /pip ([0-9.]+)/,         pkgs: ["python3-pip"], group: "Runtimes" },
+  { name: "Docker",    key: "docker",  re: /version ([0-9][0-9.]+)/, pkgs: ["docker.io", "docker-ce"], group: "Containers" },
+  { name: "nginx",     key: "nginx",   re: /nginx\/([0-9.]+)/,      pkgs: ["nginx", "nginx-core", "nginx-common"], group: "Web/TLS" },
+  { name: "certbot",   key: "certbot", re: /([0-9]+\.[0-9]+\.[0-9]+)/, pkgs: ["certbot"], group: "Web/TLS" },
+  { name: "OpenSSL",   key: "openssl", re: /OpenSSL ([0-9][0-9a-z.]+)/, pkgs: ["openssl"], group: "Web/TLS" },
+  { name: "Tailscale", key: "tailscale", re: /([0-9]+\.[0-9]+\.[0-9]+)/, pkgs: ["tailscale"], group: "Network" },
+  { name: "ufw",       key: "ufw",     re: /([0-9]+\.[0-9.]+)/,     pkgs: ["ufw"], group: "Network" },
+  { name: "git",       key: "git",     re: /version ([0-9][0-9.]+)/, pkgs: ["git"], group: "System" },
+  { name: "systemd",   key: "systemd", re: /([0-9]{3})/,            pkgs: ["systemd"], group: "System" },
+  { name: "bash",      key: "bash",    re: /version ([0-9][0-9.]+)/, pkgs: ["bash"], group: "System" },
+];
 
-// systemd services get a minimal PATH; nginx/tailscale live in sbin — widen it.
-const VERSION_SCRIPT =
+// systemd services get a minimal PATH; nginx/tailscale/ufw live in sbin — widen it.
+const SOFTWARE_SCRIPT =
   "export PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:$PATH; " +
-  'echo "docker|$(docker --version 2>/dev/null)"; ' +
-  'echo "nginx|$(nginx -v 2>&1)"; ' +
-  'echo "python|$(python3 --version 2>&1)"; ' +
-  'echo "tailscale|$(tailscale version 2>/dev/null | head -1)"';
+  ". /etc/os-release 2>/dev/null; " +
+  'echo "@v"; ' +
+  'echo "os=$NAME $VERSION_ID"; ' +
+  'echo "kernel=$(uname -r)"; ' +
+  'echo "npm=$(npm --version 2>/dev/null)"; ' +
+  'echo "docker=$(docker --version 2>/dev/null)"; ' +
+  'echo "nginx=$(nginx -v 2>&1)"; ' +
+  'echo "python=$(python3 --version 2>&1)"; ' +
+  'echo "pip=$(pip3 --version 2>/dev/null)"; ' +
+  'echo "tailscale=$(tailscale version 2>/dev/null | head -1)"; ' +
+  'echo "git=$(git --version 2>/dev/null)"; ' +
+  'echo "systemd=$(systemctl --version 2>/dev/null | head -1)"; ' +
+  'echo "openssl=$(openssl version 2>/dev/null)"; ' +
+  'echo "bash=$(bash --version 2>/dev/null | head -1)"; ' +
+  'echo "certbot=$(certbot --version 2>&1 | head -1)"; ' +
+  'echo "ufw=$(ufw version 2>/dev/null | head -1)"; ' +
+  'echo "aptcheck=$(/usr/lib/update-notifier/apt-check 2>&1)"; ' +
+  'echo "reboot=$(test -f /var/run/reboot-required && echo yes || echo no)"; ' +
+  'echo "@upg"; ' +
+  "apt list --upgradable 2>/dev/null | grep -v '^Listing'";
 
-let platformCache: PlatformItem[] | undefined;
-function detectPlatform(): Promise<PlatformItem[]> {
-  if (platformCache !== undefined) return Promise.resolve(platformCache);
+const stripEpoch = (v: string) => v.replace(/^\d+:/, "");
+
+interface Software { platform: PlatformItem[]; updates: UpdateInfo | null }
+
+let swCache: { at: number; data: Software } | undefined;
+const SW_TTL = 15 * 60_000; // apt state changes ~daily; 15 min keeps it fresh & cheap
+
+function detectSoftware(): Promise<Software> {
+  if (swCache && Date.now() - swCache.at < SW_TTL) return Promise.resolve(swCache.data);
   return new Promise((resolve) => {
-    exec(VERSION_SCRIPT, { timeout: 4000 }, (_err, stdout) => {
+    exec(SOFTWARE_SCRIPT, { timeout: 8000, maxBuffer: 4 << 20 }, (_err, stdout) => {
+      const out = stdout || "";
+      const vIdx = out.indexOf("@v");
+      const uIdx = out.indexOf("@upg");
+      const vBlock = uIdx >= 0 ? out.slice(vIdx, uIdx) : out.slice(vIdx);
+      const uBlock = uIdx >= 0 ? out.slice(uIdx) : "";
+
       const raw: Record<string, string> = {};
-      for (const line of (stdout || "").split("\n")) {
-        const i = line.indexOf("|");
-        if (i > 0) raw[line.slice(0, i)] = line.slice(i + 1).trim();
+      for (const line of vBlock.split("\n")) {
+        const i = line.indexOf("=");
+        if (i > 0) raw[line.slice(0, i).trim()] = line.slice(i + 1).trim();
       }
-      const items: PlatformItem[] = [];
-      const push = (name: string, version: string) => { if (version) items.push({ name, version }); };
-      push("OS", osString());
-      push("Node", process.version.replace(/^v/, "")); // the runtime executing this code
-      push("Docker", (raw.docker?.match(/Docker version ([^,]+)/)?.[1] ?? "").trim());
-      push("nginx", (raw.nginx?.match(/nginx\/([0-9.]+)/)?.[1] ?? "").trim());
-      push("Python", (raw.python ?? "").replace(/^Python\s+/, "").trim());
-      push("Tailscale", (raw.tailscale ?? "").trim());
-      platformCache = items;
-      resolve(items);
+
+      // apt candidate versions, keyed by package name
+      const upg = new Map<string, string>();
+      for (const line of uBlock.split("\n")) {
+        const m = line.match(/^([^/\s]+)\/\S+\s+(\S+)/);
+        if (m) upg.set(m[1], m[2]);
+      }
+
+      const platform: PlatformItem[] = [];
+      for (const s of SOFTWARE) {
+        const version = s.key === "__node"
+          ? process.version.replace(/^v/, "") // the runtime executing this code
+          : s.re ? (raw[s.key]?.match(s.re)?.[1] ?? "") : (raw[s.key] ?? "");
+        if (!version) continue;
+        const hit = s.pkgs?.map((p) => upg.get(p)).find(Boolean);
+        platform.push({
+          name: s.name,
+          version: version.trim(),
+          group: s.group,
+          outdated: !!hit,
+          ...(hit ? { latest: stripEpoch(hit) } : {}),
+        });
+      }
+
+      // apt-check emits "<updates>;<security>"
+      let updates: UpdateInfo | null = null;
+      const chk = raw.aptcheck?.match(/^(\d+);(\d+)/);
+      if (chk) updates = { upgradable: +chk[1], security: +chk[2], reboot: raw.reboot === "yes" };
+
+      const data: Software = { platform, updates };
+      swCache = { at: Date.now(), data };
+      resolve(data);
     });
   });
 }
@@ -132,7 +197,7 @@ function detectPlatform(): Promise<PlatformItem[]> {
 async function hostInfo() {
   const cpus = os.cpus();
   const arch = os.arch();
-  const [gpu, platform] = await Promise.all([detectGpu(), detectPlatform()]);
+  const [gpu, sw] = await Promise.all([detectGpu(), detectSoftware()]);
   return {
     mem: memInfo(),
     specs: {
@@ -141,7 +206,8 @@ async function hostInfo() {
       arch: arch === "x64" ? "x86_64" : arch,
       gpu,
     },
-    platform,
+    platform: sw.platform,
+    updates: sw.updates,
   };
 }
 
