@@ -39,6 +39,7 @@ const REPOS = [
   "taco-loco",
   "brookeslist",
   "jarvis-cam",
+  "baselining-tool",
 ];
 
 // Fallback for the declared fields only (id/category/status/deploy) when a repo has
