@@ -40,6 +40,7 @@ const REPOS = [
   "brookeslist",
   "jarvis-cam",
   "baselining-tool",
+  "mortgage-tool-kit",
 ];
 
 // Fallback for the declared fields only (id/category/status/deploy) when a repo has
@@ -65,6 +66,7 @@ const DEFAULTS = {
   "taco-loco": { id: "taco-loco", category: "games", status: { prod: "in_progress", dev: "live" }, deploy: { prod: { url: "https://tacoloco.dabrewer.dev/" }, dev: { url: "https://tacoloco.dabrewer.dev/dev/" } } },
   "brookeslist": { id: "brookeslist", category: "standalone", status: { prod: "in_progress", dev: "in_progress" }, deploy: { prod: { url: "https://brookeslist.dabrewer.dev/" }, dev: { url: "https://brookeslist.dabrewer.dev/dev/" } } },
   "jarvis-cam": { id: "cam", category: "jarvis-tools", status: { prod: "live", dev: "live" }, deploy: { prod: { port: 4680 }, dev: { port: 4690 } } },
+  "mortgage-tool-kit": { id: "mtk", category: "standalone", status: { prod: "in_progress", dev: "live" }, deploy: { prod: { url: "https://mtk.dabrewer.dev/" }, dev: { url: "https://mtk.dabrewer.dev/dev/" } } },
 };
 
 const TOKEN = process.env.GITHUB_TOKEN;
