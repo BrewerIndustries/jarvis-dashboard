@@ -43,6 +43,7 @@ const REPOS = [
   "baselining-tool",
   "mortgage-tool-kit",
   "soundboard",
+  "savings-tracker",
 ];
 
 // Fallback for the declared fields only (id/category/status/deploy) when a repo has
@@ -71,6 +72,7 @@ const DEFAULTS = {
   "jarvis-cam": { id: "cam", category: "jarvis-tools", status: { prod: "live", dev: "live" }, deploy: { prod: { port: 4680 }, dev: { port: 4690 } } },
   "mortgage-tool-kit": { id: "mtk", category: "standalone", status: { prod: "live", dev: "live" }, deploy: { prod: { url: "https://mtk.dabrewer.dev/" }, dev: { url: "https://mtk.dabrewer.dev/dev/" } } },
   "soundboard": { id: "soundboard", category: "standalone", status: { prod: "in_progress", dev: "live" }, deploy: { prod: { port: 4720 }, dev: { port: 4730 } } },
+  "savings-tracker": { id: "savings", category: "standalone", status: { prod: "live", dev: "live" }, deploy: { prod: { port: 4740 }, dev: { port: 4750 } } },
 };
 
 const TOKEN = process.env.GITHUB_TOKEN;
