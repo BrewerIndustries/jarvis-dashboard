@@ -75,9 +75,19 @@ const LANE_DOT_BG: Record<Lane, string> = {
 
 const CATEGORY_ORDER: Record<string, number> = {
   "jarvis-tools": 0,
-  games: 1,
-  apps: 2,
-  standalone: 3,
+  arcade: 1,
+  games: 2,
+  apps: 3,
+  standalone: 4,
+};
+
+// Shown as a sub-header within each lane. "" = uncategorised (rendered last, no header).
+const CATEGORY_LABEL: Record<string, string> = {
+  "jarvis-tools": "Jarvis Tools",
+  arcade: "🎮 Arcade",
+  games: "Games",
+  apps: "Apps",
+  standalone: "Standalone",
 };
 
 // --- helpers -----------------------------------------------------------------
@@ -391,13 +401,38 @@ function LaneSection({ lane, cards, health, now }: {
         <div style={{ flex: 1, height: 1, background: "var(--border)", marginLeft: 4 }} />
       </div>
 
-      <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fill, minmax(270px, 1fr))" }}>
-        {cards.map((card) => (
-          <ProjectCard key={card.id} card={card} health={health} now={now} />
-        ))}
-      </div>
+      {groupByCategory(cards).map(({ cat, items }) => (
+        <div key={cat || "_"} style={{ marginBottom: 14 }}>
+          {CATEGORY_LABEL[cat] && (
+            <div style={{
+              fontSize: 10, fontWeight: 600, letterSpacing: "0.08em",
+              textTransform: "uppercase", color: "var(--text-muted)",
+              margin: "0 0 8px 17px",
+            }}>
+              {CATEGORY_LABEL[cat]}
+            </div>
+          )}
+          <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fill, minmax(270px, 1fr))" }}>
+            {items.map((card) => (
+              <ProjectCard key={card.id} card={card} health={health} now={now} />
+            ))}
+          </div>
+        </div>
+      ))}
     </section>
   );
+}
+
+// Group already-sorted cards into consecutive category runs (preserves sort order).
+function groupByCategory(cards: Card[]): { cat: string; items: Card[] }[] {
+  const groups: { cat: string; items: Card[] }[] = [];
+  for (const card of cards) {
+    const cat = card.category ?? "";
+    const last = groups[groups.length - 1];
+    if (last && last.cat === cat) last.items.push(card);
+    else groups.push({ cat, items: [card] });
+  }
+  return groups;
 }
 
 // --- project card ------------------------------------------------------------
