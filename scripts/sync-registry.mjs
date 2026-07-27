@@ -26,6 +26,7 @@ const REPOS = [
   "jarvis-jams",
   "idea-log",
   "bpt-2.0",
+  "jarvis-arcade",
   "spacebaserace",
   "Stellar-Ascent",
   "poker",
@@ -41,6 +42,7 @@ const REPOS = [
   "jarvis-cam",
   "baselining-tool",
   "mortgage-tool-kit",
+  "soundboard",
 ];
 
 // Fallback for the declared fields only (id/category/status/deploy) when a repo has
@@ -48,6 +50,7 @@ const REPOS = [
 const DEFAULTS = {
   "jarvis-dashboard": { id: "dashboard", category: "jarvis-tools", status: { prod: "live", dev: "live" }, deploy: { prod: { port: 4500 }, dev: { port: 4510 } } },
   "jarvis-launcher": { id: "launcher", category: "jarvis-tools", status: { prod: "live", dev: "live" }, deploy: { prod: { port: 4400 }, dev: { port: 4410 } } },
+  "jarvis-arcade": { id: "arcade", category: "arcade", status: { prod: "live", dev: "live" }, deploy: { prod: { url: "https://arcade.dabrewer.dev/" }, dev: { url: "https://arcade-dev.dabrewer.dev/" } } },
   "jarvis-timer": { id: "jarvis-timer", category: "standalone", status: { prod: "live", dev: "live" }, deploy: { prod: { url: "https://jarvis-timer.dabrewer.dev/" }, dev: { url: "https://jarvis-timer.dabrewer.dev/dev/" } } },
   "jarvis-jams": { id: "jarvis-jams", category: "standalone", status: { prod: "live", dev: "live" }, deploy: { prod: { url: "https://jarvis-jams.dabrewer.dev/" }, dev: { url: "https://jarvis-jams.dabrewer.dev/dev/" } } },
   "dans-recipes": { id: "dans-recipes", category: "standalone", status: { prod: "live", dev: "live" }, deploy: { prod: { url: "https://dans-recipes.dabrewer.dev/" }, dev: { url: "https://dans-recipes.dabrewer.dev/dev/" } } },
@@ -67,6 +70,7 @@ const DEFAULTS = {
   "brookeslist": { id: "brookeslist", category: "standalone", status: { prod: "in_progress", dev: "in_progress" }, deploy: { prod: { url: "https://brookeslist.dabrewer.dev/" }, dev: { url: "https://brookeslist.dabrewer.dev/dev/" } } },
   "jarvis-cam": { id: "cam", category: "jarvis-tools", status: { prod: "live", dev: "live" }, deploy: { prod: { port: 4680 }, dev: { port: 4690 } } },
   "mortgage-tool-kit": { id: "mtk", category: "standalone", status: { prod: "live", dev: "live" }, deploy: { prod: { url: "https://mtk.dabrewer.dev/" }, dev: { url: "https://mtk.dabrewer.dev/dev/" } } },
+  "soundboard": { id: "soundboard", category: "standalone", status: { prod: "in_progress", dev: "live" }, deploy: { prod: { port: 4720 }, dev: { port: 4730 } } },
 };
 
 const TOKEN = process.env.GITHUB_TOKEN;
