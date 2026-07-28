@@ -57,21 +57,29 @@ data/registry.json  ← gitignored, server-only
     ↓
 /api/registry  →  { env, cards[] }  (per-env lane, all card fields)
 /api/health    →  { apps: { [id]: { state, ms } } }  (pings each deployment)
+/api/prefs     →  { order, collapsed, sort }  (GET/PUT layout, stored in data/prefs.json)
     ↓
-Dashboard.tsx  →  card grid grouped by lane (LIVE / IN PROGRESS / MOTHBALLED)
+Dashboard.tsx  →  card grid grouped by lane (LIVE / IN PROGRESS / MOTHBALLED),
+                  with filter, sort menu, collapsible lanes, drag-to-reorder
 ```
 
 ### Files
 
 - `src/lib/registry.ts` — `RegistryEntry` type, `registry()`, `laneFor()`, `targetUrl()`, `activeEnv()`
+- `src/lib/prefs.ts` — `Prefs` type (order/collapsed/sort), `normalizePrefs()`; fs-free (shared client+server)
 - `src/app/api/registry/route.ts` — serves `{ env, cards[] }` (lane computed per-env)
 - `src/app/api/health/route.ts` — pings each deployment; keyed by card `id`
+- `src/app/api/prefs/route.ts` — GET/PUT layout prefs; persisted to `data/prefs.json` (per-env, gitignored)
 - `src/components/Dashboard.tsx` — card grid UI (client component, polls every 8s)
 - `src/app/page.tsx` — server entry; `resolveEnv()` for the DEV banner + tab title
 - `src/app/globals.css` — DOS/CRT theme (CGA palette, scanlines, double-line boxes)
 - `scripts/sync-registry.mjs` — aggregates `.jarvis.json` from each repo via GitHub API
   into `data/registry.json`; enriches with version, lastCommit, backlog count, liveUrl
 - `deploy/` — systemd units, deploy scripts, `deploy/sync-registry.sh` (cron wrapper)
+
+**Layout prefs** (manual card order, collapsed lanes, sort mode) are saved server-side
+in `data/prefs.json` via `/api/prefs`, so a layout follows the user across devices (not
+just one browser). Like `registry.json`, it's per-env and gitignored (`data/*.json`).
 
 ### Card data sources
 
@@ -112,7 +120,13 @@ JARVIS_REF=main OUT=<prod-paths> node sync-registry.mjs
 ```
 
 Token: `~/.config/jarvis/registry-sync.env` (GITHUB_TOKEN=..., mode 600).
-Output feeds both dashboard and launcher on dev + prod.
+Output feeds the dashboard on dev + prod.
+
+**Repos are auto-discovered** — `sync-registry.mjs` enumerates every repo on the
+`BrewerIndustries` account (a User, so via `/user/repos`) and includes any with a
+committed `.jarvis.json`. No hardcoded allowlist: a new project appears just by
+committing that file; removing it (or archiving the repo) drops the card. The
+`DEFAULTS` map is an optional per-repo fallback for incomplete declarations.
 
 ## Current status (2026-06-19)
 

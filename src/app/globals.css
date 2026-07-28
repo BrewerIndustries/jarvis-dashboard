@@ -71,6 +71,35 @@ html, body {
   animation: fade-in 0.2s ease forwards;
 }
 
+/* Drag-to-reorder grip — sits in the card's left gutter, reveals on hover */
+.drag-cell { position: relative; }
+.drag-grip {
+  position: absolute; left: 0; top: 0; bottom: 0; width: 16px;
+  display: flex; align-items: center; justify-content: center;
+  color: var(--text-muted); font-size: 11px; line-height: 1;
+  cursor: grab; opacity: 0; transition: opacity 0.15s; z-index: 3;
+  user-select: none; -webkit-user-select: none;
+}
+.drag-cell:hover .drag-grip { opacity: 0.4; }
+.drag-grip:hover { opacity: 0.85; }
+.drag-grip:active { cursor: grabbing; }
+.drag-cell.dragging { opacity: 0.35; }
+.drag-cell.drop-target::after {
+  content: ""; position: absolute; inset: -2px;
+  border: 1px dashed var(--border-hi); border-radius: 12px;
+  pointer-events: none;
+}
+
+/* Collapsible lane header (rendered as a button) */
+.lane-toggle {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; margin-bottom: 14px;
+  background: none; border: none; padding: 0;
+  cursor: pointer; text-align: left; font: inherit;
+}
+.lane-chevron { transition: transform 0.15s ease; flex-shrink: 0; }
+.lane-toggle[data-collapsed="true"] .lane-chevron { transform: rotate(-90deg); }
+
 /* Log area monospace */
 .log-mono {
   font-family: "Cascadia Code", "JetBrains Mono", "IBM Plex Mono", Consolas, monospace;

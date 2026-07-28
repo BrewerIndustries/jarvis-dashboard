@@ -17,14 +17,14 @@ done
 
 NODE="$(command -v node || echo /usr/bin/node)"
 
-# DEV registry (reads dev branches) → dev dashboard + dev launcher
+# DEV registry (reads dev branches) → dev dashboard
 if [ -f /opt/jarvis-dashboard-dev/scripts/sync-registry.mjs ]; then
-  JARVIS_REF=dev OUT=/opt/jarvis-dashboard-dev/data/registry.json,/opt/jarvis-launcher-dev/data/registry.json \
+  JARVIS_REF=dev OUT=/opt/jarvis-dashboard-dev/data/registry.json \
     "$NODE" /opt/jarvis-dashboard-dev/scripts/sync-registry.mjs
 fi
 
-# PROD registry (reads main) → prod dashboard + prod launcher (activates once on main)
+# PROD registry (reads main) → prod dashboard (activates once on main)
 if [ -f /opt/jarvis-dashboard/scripts/sync-registry.mjs ]; then
-  JARVIS_REF=main OUT=/opt/jarvis-dashboard/data/registry.json,/opt/jarvis-launcher/data/registry.json \
+  JARVIS_REF=main OUT=/opt/jarvis-dashboard/data/registry.json \
     "$NODE" /opt/jarvis-dashboard/scripts/sync-registry.mjs
 fi

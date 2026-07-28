@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Lane } from "@/lib/registry";
+import { DEFAULT_PREFS, SORT_LABEL, SORT_MODES, type Prefs, type SortMode } from "@/lib/prefs";
 import { applyPalette, computePalette } from "@/lib/ambientTheme";
 
 // --- types -------------------------------------------------------------------
@@ -73,23 +74,6 @@ const LANE_DOT_BG: Record<Lane, string> = {
   mothballed:  "rgba(255,255,255,0.05)",
 };
 
-const CATEGORY_ORDER: Record<string, number> = {
-  "jarvis-tools": 0,
-  arcade: 1,
-  games: 2,
-  apps: 3,
-  standalone: 4,
-};
-
-// Shown as a sub-header within each lane. "" = uncategorised (rendered last, no header).
-const CATEGORY_LABEL: Record<string, string> = {
-  "jarvis-tools": "Jarvis Tools",
-  arcade: "🎮 Arcade",
-  games: "Games",
-  apps: "Apps",
-  standalone: "Standalone",
-};
-
 // --- helpers -----------------------------------------------------------------
 
 function timeAgo(iso: string): string {
@@ -104,12 +88,38 @@ function timeAgo(iso: string): string {
   return `${Math.round(d / 30)}mo`;
 }
 
-function sortCards(cards: Card[]): Card[] {
+// --- card ordering -----------------------------------------------------------
+// Layout prefs (manual order, collapsed lanes, sort mode) are persisted
+// server-side via /api/prefs — see src/lib/prefs.ts.
+
+const byName = (a: Card, b: Card) => a.name.localeCompare(b.name);
+
+// Apply a saved id order to a lane's cards; ids not in the saved order (e.g. a
+// newly auto-discovered project) fall to the end, alphabetically.
+function applyOrder(cards: Card[], order?: string[]): Card[] {
+  if (!order || order.length === 0) return [...cards].sort(byName);
+  const pos = new Map(order.map((id, i) => [id, i] as const));
   return [...cards].sort((a, b) => {
-    const ao = CATEGORY_ORDER[a.category ?? ""] ?? 99;
-    const bo = CATEGORY_ORDER[b.category ?? ""] ?? 99;
-    return ao - bo || a.name.localeCompare(b.name);
+    const ai = pos.get(a.id) ?? Infinity;
+    const bi = pos.get(b.id) ?? Infinity;
+    return ai !== bi ? ai - bi : byName(a, b);
   });
+}
+
+// Order a lane's cards for the active sort mode.
+function laneCards(cards: Card[], sort: SortMode, order?: string[]): Card[] {
+  if (sort === "custom") return applyOrder(cards, order);
+  const arr = [...cards];
+  if (sort === "name") return arr.sort(byName);
+  if (sort === "recent") {
+    return arr.sort((a, b) => {
+      const at = a.lastCommit ? Date.parse(a.lastCommit) : 0;
+      const bt = b.lastCommit ? Date.parse(b.lastCommit) : 0;
+      return bt - at || byName(a, b);
+    });
+  }
+  // backlog — most open items first
+  return arr.sort((a, b) => (b.backlog ?? 0) - (a.backlog ?? 0) || byName(a, b));
 }
 
 const ENV_URLS: Record<string, { label: string; url: string }> = {
@@ -134,6 +144,46 @@ export default function Dashboard({ env }: { env?: string | null }) {
   const [health, setHealth] = useState<HealthMap>({});
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(0);
+  const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
+  const [filter, setFilter] = useState("");
+  const prefsLoaded = useRef(false);
+
+  // Load the saved layout from the server once on mount.
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/prefs", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((p: Prefs) => { if (alive) setPrefs(p); })
+      .catch(() => { /* server down → keep defaults */ })
+      .finally(() => { prefsLoaded.current = true; });
+    return () => { alive = false; };
+  }, []);
+
+  // Apply + persist a layout change. Skips writes until the initial load resolves
+  // so we never clobber saved prefs with the default state on first paint.
+  const persist = useCallback((next: Prefs) => {
+    setPrefs(next);
+    if (!prefsLoaded.current) return;
+    fetch("/api/prefs", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(next),
+    }).catch(() => { /* offline — local state still updated */ });
+  }, []);
+
+  const toggleCollapse = (lane: Lane) =>
+    persist({ ...prefs, collapsed: { ...prefs.collapsed, [lane]: !prefs.collapsed[lane] } });
+  const reorderLane = (lane: Lane, ids: string[]) =>
+    persist({ ...prefs, order: { ...prefs.order, [lane]: ids } });
+  const setSort = (sort: SortMode) => persist({ ...prefs, sort });
+  const setAllCollapsed = (collapsed: boolean) =>
+    persist({ ...prefs, collapsed: Object.fromEntries(LANE_ORDER.map((l) => [l, collapsed])) });
+  const resetLayout = () => persist(DEFAULT_PREFS);
+
+  const hasCustomLayout =
+    prefs.sort !== "custom" ||
+    LANE_ORDER.some((l) => (prefs.order[l]?.length ?? 0) > 0 || prefs.collapsed[l]);
+  const allCollapsed = LANE_ORDER.every((l) => prefs.collapsed[l]);
 
   const refreshCards = useCallback(async () => {
     try {
@@ -163,13 +213,22 @@ export default function Dashboard({ env }: { env?: string | null }) {
     return () => clearInterval(t);
   }, [refreshCards, refreshHealth]);
 
+  const q = filter.trim().toLowerCase();
+  const filtering = q.length > 0;
+  const filtered = filtering
+    ? cards.filter((c) =>
+        c.name.toLowerCase().includes(q) || (c.description ?? "").toLowerCase().includes(q))
+    : cards;
+
   const byLane: Record<Lane, Card[]> = { live: [], in_progress: [], mothballed: [] };
-  for (const card of cards) {
+  for (const card of filtered) {
     (byLane[card.lane] ?? byLane.in_progress).push(card);
   }
 
-  const liveCount = byLane.live.length;
+  // Header stats reflect the full inventory, not the current filter.
+  const liveCount = cards.filter((c) => c.lane === "live").length;
   const totalCount = cards.length;
+  const matchCount = filtered.length;
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--base)" }}>
@@ -182,21 +241,43 @@ export default function Dashboard({ env }: { env?: string | null }) {
           env={env}
           view={view}
           onViewChange={setView}
+          canReset={view === "projects" && hasCustomLayout}
+          onReset={resetLayout}
         />
 
-        <main style={{ marginTop: 28, display: "flex", flexDirection: "column", gap: 32 }}>
+        {view === "projects" && !loading && cards.length > 0 && (
+          <ControlsBar
+            filter={filter}
+            onFilter={setFilter}
+            sort={prefs.sort}
+            onSort={setSort}
+            allCollapsed={allCollapsed}
+            onToggleAll={() => setAllCollapsed(!allCollapsed)}
+            filtering={filtering}
+            matchCount={matchCount}
+            totalCount={totalCount}
+          />
+        )}
+
+        <main style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 32 }}>
           {view === "health" ? (
             <HealthTab />
           ) : loading ? (
             <LoadingState />
           ) : cards.length === 0 ? (
             <EmptyState />
+          ) : filtering && matchCount === 0 ? (
+            <NoMatches query={filter} />
           ) : (
             LANE_ORDER.map((lane) => (
               <LaneSection
                 key={lane}
                 lane={lane}
-                cards={sortCards(byLane[lane])}
+                cards={laneCards(byLane[lane], prefs.sort, prefs.order[lane])}
+                collapsed={filtering ? false : !!prefs.collapsed[lane]}
+                draggable={prefs.sort === "custom" && !filtering}
+                onToggleCollapse={() => toggleCollapse(lane)}
+                onReorder={(ids) => reorderLane(lane, ids)}
                 health={health}
                 now={now}
               />
@@ -235,13 +316,15 @@ function EnvBanner({ env }: { env: string }) {
 // --- header ------------------------------------------------------------------
 
 function Header({
-  liveCount, totalCount, env, view, onViewChange,
+  liveCount, totalCount, env, view, onViewChange, canReset, onReset,
 }: {
   liveCount: number;
   totalCount: number;
   env?: string | null;
   view: View;
   onViewChange: (v: View) => void;
+  canReset: boolean;
+  onReset: () => void;
 }) {
   const envLink = env ? ENV_URLS[env.toLowerCase()] : ENV_URLS["prod"];
 
@@ -281,6 +364,25 @@ function Header({
 
       {/* Right side */}
       <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+        {canReset && (
+          <button
+            onClick={onReset}
+            title="Reset card order & collapsed sections"
+            style={{
+              fontSize: 11, color: "var(--text-dim)",
+              background: "transparent", cursor: "pointer",
+              letterSpacing: "0.04em",
+              padding: "5px 10px",
+              border: "1px solid var(--border)",
+              borderRadius: 6,
+              transition: "color 0.15s, border-color 0.15s",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.color = "var(--text)"; e.currentTarget.style.borderColor = "var(--border-mid)"; }}
+            onMouseLeave={e => { e.currentTarget.style.color = "var(--text-dim)"; e.currentTarget.style.borderColor = "var(--border)"; }}
+          >
+            ⟲ Layout
+          </button>
+        )}
         {envLink && (
           <a
             href={envLink.url}
@@ -359,23 +461,182 @@ function EmptyState() {
   );
 }
 
+function NoMatches({ query }: { query: string }) {
+  return (
+    <div style={{ padding: "40px 0", textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>
+      No projects match “{query.trim()}”.
+    </div>
+  );
+}
+
+// --- controls bar (filter / sort / collapse-all) -----------------------------
+
+function ControlsBar({
+  filter, onFilter, sort, onSort, allCollapsed, onToggleAll, filtering, matchCount, totalCount,
+}: {
+  filter: string;
+  onFilter: (v: string) => void;
+  sort: SortMode;
+  onSort: (s: SortMode) => void;
+  allCollapsed: boolean;
+  onToggleAll: () => void;
+  filtering: boolean;
+  matchCount: number;
+  totalCount: number;
+}) {
+  return (
+    <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+      {/* Filter */}
+      <div style={{ position: "relative", flex: "1 1 220px", maxWidth: 340 }}>
+        <span style={{
+          position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)",
+          fontSize: 12, color: "var(--text-muted)", pointerEvents: "none",
+        }}>⌕</span>
+        <input
+          value={filter}
+          onChange={(e) => onFilter(e.target.value)}
+          placeholder="Filter projects…"
+          aria-label="Filter projects"
+          style={{
+            width: "100%", padding: "7px 26px", boxSizing: "border-box",
+            background: "var(--surface)", border: "1px solid var(--border)",
+            borderRadius: 8, color: "var(--text)", fontSize: 12, outline: "none",
+            transition: "border-color 0.15s",
+          }}
+          onFocus={(e) => (e.currentTarget.style.borderColor = "var(--border-mid)")}
+          onBlur={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
+        />
+        {filter && (
+          <button
+            onClick={() => onFilter("")}
+            title="Clear filter"
+            aria-label="Clear filter"
+            style={{
+              position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)",
+              background: "none", border: "none", color: "var(--text-muted)",
+              cursor: "pointer", fontSize: 15, lineHeight: 1, padding: "2px 4px",
+            }}
+          >×</button>
+        )}
+      </div>
+
+      {filtering && (
+        <span style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.03em" }}>
+          {matchCount} of {totalCount}
+        </span>
+      )}
+
+      <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+        <label style={{
+          display: "flex", alignItems: "center", gap: 6,
+          fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.04em",
+        }}>
+          Sort
+          <select
+            value={sort}
+            onChange={(e) => onSort(e.target.value as SortMode)}
+            style={{
+              background: "var(--surface)", color: "var(--text)",
+              border: "1px solid var(--border)", borderRadius: 6,
+              padding: "5px 8px", fontSize: 11, cursor: "pointer", outline: "none",
+            }}
+          >
+            {SORT_MODES.map((m) => (
+              <option key={m} value={m} style={{ background: "var(--surface)" }}>{SORT_LABEL[m]}</option>
+            ))}
+          </select>
+        </label>
+
+        <button
+          onClick={onToggleAll}
+          style={{
+            fontSize: 11, color: "var(--text-dim)", background: "transparent",
+            cursor: "pointer", letterSpacing: "0.04em", padding: "5px 10px",
+            border: "1px solid var(--border)", borderRadius: 6,
+            transition: "color 0.15s, border-color 0.15s",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; e.currentTarget.style.borderColor = "var(--border-mid)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-dim)"; e.currentTarget.style.borderColor = "var(--border)"; }}
+        >
+          {allCollapsed ? "Expand all" : "Collapse all"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // --- lane section ------------------------------------------------------------
 
-function LaneSection({ lane, cards, health, now }: {
+function LaneSection({ lane, cards, collapsed, draggable, onToggleCollapse, onReorder, health, now }: {
   lane: Lane;
   cards: Card[];
+  collapsed: boolean;
+  draggable: boolean;
+  onToggleCollapse: () => void;
+  onReorder: (ids: string[]) => void;
   health: HealthMap;
   now: number;
 }) {
+  // Local id order drives rendering so a drag reorders instantly; it re-syncs from
+  // props (the persisted order) whenever a drag isn't in progress.
+  const [localIds, setLocalIds] = useState<string[]>(() => cards.map((c) => c.id));
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+  const idsRef = useRef(localIds);
+  idsRef.current = localIds;
+  const dragRef = useRef<string | null>(null); // active drag id (drives logic; state is for styling)
+  const overRef = useRef<string | null>(null); // last card we reordered onto (dedupes dragenter)
+
+  useEffect(() => {
+    if (!draggingId) setLocalIds(cards.map((c) => c.id));
+  }, [cards, draggingId]);
+
   if (cards.length === 0) return null;
+
+  const byId = new Map(cards.map((c) => [c.id, c]));
+  const ordered = localIds.map((id) => byId.get(id)).filter(Boolean) as Card[];
+
+  function startDrag(id: string) {
+    dragRef.current = id;
+    overRef.current = id;
+    setDraggingId(id);
+    setOverId(id);
+  }
+
+  // Move the dragged card to the target's slot — but only when the pointer crosses
+  // onto a *new* card, so hovering within one card can't oscillate the order.
+  function moveOver(targetId: string) {
+    const dragId = dragRef.current;
+    if (!dragId || dragId === targetId || overRef.current === targetId) return;
+    overRef.current = targetId;
+    setOverId(targetId);
+    setLocalIds((prev) => {
+      const cur = [...prev];
+      const fi = cur.indexOf(dragId);
+      const ti = cur.indexOf(targetId);
+      if (fi < 0 || ti < 0) return prev;
+      cur.splice(ti, 0, cur.splice(fi, 1)[0]);
+      return cur;
+    });
+  }
+
+  function endDrag() {
+    dragRef.current = null;
+    overRef.current = null;
+    setDraggingId(null);
+    setOverId(null);
+    onReorder(idsRef.current);
+  }
 
   return (
     <section>
-      {/* Lane header */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: 10,
-        marginBottom: 14,
-      }}>
+      <button
+        className="lane-toggle"
+        data-collapsed={collapsed}
+        onClick={onToggleCollapse}
+        aria-expanded={!collapsed}
+      >
+        <span className="lane-chevron" style={{ fontSize: 9, color: LANE_COLOR[lane], width: 8 }}>▾</span>
         <span style={{
           display: "inline-block",
           width: 7, height: 7, borderRadius: "50%",
@@ -398,41 +659,76 @@ function LaneSection({ lane, cards, health, now }: {
         }}>
           {cards.length}
         </span>
-        <div style={{ flex: 1, height: 1, background: "var(--border)", marginLeft: 4 }} />
-      </div>
+        <span style={{ flex: 1, height: 1, background: "var(--border)", marginLeft: 4 }} />
+      </button>
 
-      {groupByCategory(cards).map(({ cat, items }) => (
-        <div key={cat || "_"} style={{ marginBottom: 14 }}>
-          {CATEGORY_LABEL[cat] && (
-            <div style={{
-              fontSize: 10, fontWeight: 600, letterSpacing: "0.08em",
-              textTransform: "uppercase", color: "var(--text-muted)",
-              margin: "0 0 8px 17px",
-            }}>
-              {CATEGORY_LABEL[cat]}
-            </div>
-          )}
-          <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fill, minmax(270px, 1fr))" }}>
-            {items.map((card) => (
+      {!collapsed && (
+        <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fill, minmax(270px, 1fr))" }}>
+          {ordered.map((card) =>
+            draggable ? (
+              <DraggableCard
+                key={card.id}
+                card={card}
+                health={health}
+                now={now}
+                dragging={draggingId === card.id}
+                dropTarget={overId === card.id && draggingId !== card.id}
+                onGripDragStart={() => startDrag(card.id)}
+                onCardDragEnter={() => moveOver(card.id)}
+                onDragEnd={endDrag}
+              />
+            ) : (
               <ProjectCard key={card.id} card={card} health={health} now={now} />
-            ))}
-          </div>
+            ),
+          )}
         </div>
-      ))}
+      )}
     </section>
   );
 }
 
-// Group already-sorted cards into consecutive category runs (preserves sort order).
-function groupByCategory(cards: Card[]): { cat: string; items: Card[] }[] {
-  const groups: { cat: string; items: Card[] }[] = [];
-  for (const card of cards) {
-    const cat = card.category ?? "";
-    const last = groups[groups.length - 1];
-    if (last && last.cat === cat) last.items.push(card);
-    else groups.push({ cat, items: [card] });
-  }
-  return groups;
+// A ProjectCard wrapped with a hover-reveal drag grip (HTML5 drag-and-drop).
+// Only the grip is draggable, so the card's links stay clickable; the whole card
+// is used as the drag image.
+function DraggableCard({
+  card, health, now, dragging, dropTarget, onGripDragStart, onCardDragEnter, onDragEnd,
+}: {
+  card: Card;
+  health: HealthMap;
+  now: number;
+  dragging: boolean;
+  dropTarget: boolean;
+  onGripDragStart: () => void;
+  onCardDragEnter: () => void;
+  onDragEnd: () => void;
+}) {
+  const ref = useRef<HTMLDivElement>(null);
+
+  return (
+    <div
+      ref={ref}
+      className={`drag-cell${dragging ? " dragging" : ""}${dropTarget ? " drop-target" : ""}`}
+      onDragEnter={onCardDragEnter}
+      onDragOver={(e) => e.preventDefault()}
+    >
+      <span
+        className="drag-grip"
+        draggable
+        title="Drag to reorder"
+        aria-label={`Reorder ${card.name}`}
+        onDragStart={(e) => {
+          e.dataTransfer.effectAllowed = "move";
+          e.dataTransfer.setData("text/plain", card.id);
+          if (ref.current) e.dataTransfer.setDragImage(ref.current, 24, 20);
+          onGripDragStart();
+        }}
+        onDragEnd={onDragEnd}
+      >
+        ⠿
+      </span>
+      <ProjectCard card={card} health={health} now={now} />
+    </div>
+  );
 }
 
 // --- project card ------------------------------------------------------------
