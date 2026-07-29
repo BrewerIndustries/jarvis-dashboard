@@ -85,6 +85,14 @@ html, body {
 }
 /* Floating preview appears instantly (skip the card's fade-in). */
 .drag-ghost .card { animation: none; opacity: 1; }
+
+/* While a card is being dragged, suppress text selection page-wide so a sweep
+   over other cards doesn't highlight their text. */
+body.reordering, body.reordering * {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+body.reordering { cursor: grabbing; }
 .drag-cell.drop-target::after {
   content: ""; position: absolute; inset: -2px;
   border: 1px dashed var(--border-hi); border-radius: 12px;
