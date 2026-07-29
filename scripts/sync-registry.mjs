@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Build the unified project registry that the dashboard + launcher read.
+// Build the unified project registry that the dashboard reads.
 //
 // Per-repo `.jarvis.json` is the source of record for the card's declared fields —
 // `id`, `name`, `description`, `category`, `status` (per-env lane), `deploy`. The rest
@@ -11,46 +11,25 @@
 //   • backlog     — open checkboxes in BACKLOG.md, else items under a README ## Backlog/## TODO
 //   • repoUrl / liveUrl — GitHub link + the public launch URL (deployed apps only)
 //
-// Env: GITHUB_TOKEN (required for private repos) · JARVIS_REF (dev|main) · OUT (comma-sep paths)
+// Repos are AUTO-DISCOVERED from the ORG account — any repo with a committed
+// `.jarvis.json` shows up on the dashboard, no hardcoded allowlist to maintain.
+//
+// Env: GITHUB_TOKEN (required to list + read private repos) · JARVIS_REF (dev|main) · OUT (comma-sep paths)
 
 import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 
 const ORG = "BrewerIndustries";
 const DOMAIN = process.env.JARVIS_DOMAIN ?? "dabrewer.dev";
-const REPOS = [
-  "Jarvis",
-  "jarvis-dashboard",
-  "jarvis-launcher",
-  "jarvis-timer",
-  "jarvis-jams",
-  "idea-log",
-  "bpt-2.0",
-  "jarvis-arcade",
-  "spacebaserace",
-  "Stellar-Ascent",
-  "poker",
-  "jarvis-junction",
-  "tessera",
-  "tessera-court-mock",
-  "tessera-dems-mock",
-  "historic-map",
-  "dans-recipes",
-  "blobby",
-  "taco-loco",
-  "brookeslist",
-  "jarvis-cam",
-  "baselining-tool",
-  "mortgage-tool-kit",
-  "soundboard",
-  "savings-tracker",
-];
 
-// Fallback for the declared fields only (id/category/status/deploy) when a repo has
-// no .jarvis.json yet. `subdomain` overrides the public-URL slug where it differs from id.
+// Repos are auto-discovered (see listRepos) — a repo opts into the dashboard simply by
+// committing a `.jarvis.json`. Nothing to maintain here when adding/removing a project.
+
+// Optional fallback for the declared fields (id/category/status/deploy) if a repo's
+// `.jarvis.json` is missing or incomplete. `subdomain` overrides the public-URL slug
+// where it differs from id. Safe to prune an entry once its repo declares those fields.
 const DEFAULTS = {
   "jarvis-dashboard": { id: "dashboard", category: "jarvis-tools", status: { prod: "live", dev: "live" }, deploy: { prod: { port: 4500 }, dev: { port: 4510 } } },
-  "jarvis-launcher": { id: "launcher", category: "jarvis-tools", status: { prod: "live", dev: "live" }, deploy: { prod: { port: 4400 }, dev: { port: 4410 } } },
   "jarvis-arcade": { id: "arcade", category: "arcade", status: { prod: "live", dev: "live" }, deploy: { prod: { url: "https://arcade.dabrewer.dev/" }, dev: { url: "https://arcade-dev.dabrewer.dev/" } } },
   "jarvis-timer": { id: "jarvis-timer", category: "standalone", status: { prod: "live", dev: "live" }, deploy: { prod: { url: "https://jarvis-timer.dabrewer.dev/" }, dev: { url: "https://jarvis-timer.dabrewer.dev/dev/" } } },
   "jarvis-jams": { id: "jarvis-jams", category: "standalone", status: { prod: "live", dev: "live" }, deploy: { prod: { url: "https://jarvis-jams.dabrewer.dev/" }, dev: { url: "https://jarvis-jams.dabrewer.dev/dev/" } } },
@@ -84,6 +63,26 @@ const HEADERS = {
   "user-agent": "jarvis-registry-sync",
   ...(TOKEN ? { authorization: `Bearer ${TOKEN}` } : {}),
 };
+
+// Enumerate every repo owned by ORG (public + private) via the authenticated user.
+// ORG is a User account, so the endpoint is /user/repos (not /orgs/…). This only lists
+// candidates — a repo actually appears on the dashboard once it has a `.jarvis.json`.
+// Needs a token; without one, listing fails and main() falls back to the DEFAULTS keys.
+async function listRepos() {
+  const names = [];
+  for (let page = 1; page <= 20; page++) {
+    const res = await fetch(
+      `https://api.github.com/user/repos?per_page=100&page=${page}&visibility=all&affiliation=owner`,
+      { headers: { ...HEADERS, accept: "application/vnd.github+json" } },
+    );
+    if (!res.ok) throw new Error(`GitHub ${res.status} listing repos`);
+    const batch = await res.json();
+    if (!Array.isArray(batch) || batch.length === 0) break;
+    for (const r of batch) if (r.owner?.login === ORG) names.push(r.name);
+    if (batch.length < 100) break;
+  }
+  return names;
+}
 
 // Raw file contents at a ref, or undefined on 404.
 async function raw(repo, ref, path) {
@@ -196,14 +195,25 @@ async function fetchDecl(repo) {
 }
 
 async function main() {
+  let repos;
+  try {
+    repos = await listRepos();
+    console.log(`discovered ${repos.length} repos under ${ORG}`);
+  } catch (e) {
+    repos = Object.keys(DEFAULTS);
+    console.error(`! repo discovery failed (${e.message}) — falling back to ${repos.length} DEFAULTS keys`);
+  }
+  repos.sort((a, b) => a.toLowerCase().localeCompare(b.toLowerCase()));
+
   const out = [];
-  for (const repo of REPOS) {
+  for (const repo of repos) {
     let decl = null;
     try {
       decl = await fetchDecl(repo);
     } catch (e) {
       console.error(`! ${repo}: ${e.message}`);
     }
+    if (!decl && !DEFAULTS[repo]) continue; // no .jarvis.json → hasn't opted into the dashboard
     const m = { ...(DEFAULTS[repo] || {}), ...(decl || {}) };
     if (!m.id) {
       console.error(`! ${repo}: no id and no default — skipping`);

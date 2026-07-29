@@ -71,6 +71,36 @@ html, body {
   animation: fade-in 0.2s ease forwards;
 }
 
+/* Drag-to-reorder — the whole card is the handle (cursor set inline). The card
+   being dragged is shown as a floating preview (.drag-ghost); its slot becomes an
+   empty dashed placeholder that slides to the drop position. */
+.drag-cell { position: relative; }
+.drag-cell.dragging { cursor: grabbing; }
+.drag-cell.dragging > * { visibility: hidden; } /* hide content; slot keeps its size */
+.drag-cell.dragging::after {
+  content: ""; position: absolute; inset: 0;
+  border: 1px dashed var(--border-hi); border-radius: 10px;
+  background: rgba(255,255,255,0.02);
+  pointer-events: none;
+}
+/* Floating preview appears instantly (skip the card's fade-in). */
+.drag-ghost .card { animation: none; opacity: 1; }
+.drag-cell.drop-target::after {
+  content: ""; position: absolute; inset: -2px;
+  border: 1px dashed var(--border-hi); border-radius: 12px;
+  pointer-events: none;
+}
+
+/* Collapsible lane header (rendered as a button) */
+.lane-toggle {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; margin-bottom: 14px;
+  background: none; border: none; padding: 0;
+  cursor: pointer; text-align: left; font: inherit;
+}
+.lane-chevron { transition: transform 0.15s ease; flex-shrink: 0; }
+.lane-toggle[data-collapsed="true"] .lane-chevron { transform: rotate(-90deg); }
+
 /* Log area monospace */
 .log-mono {
   font-family: "Cascadia Code", "JetBrains Mono", "IBM Plex Mono", Consolas, monospace;

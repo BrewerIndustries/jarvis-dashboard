@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Lane } from "@/lib/registry";
+import { DEFAULT_PREFS, SORT_LABEL, SORT_MODES, type Prefs, type SortMode } from "@/lib/prefs";
 import { applyPalette, computePalette } from "@/lib/ambientTheme";
 
 // --- types -------------------------------------------------------------------
@@ -73,23 +74,6 @@ const LANE_DOT_BG: Record<Lane, string> = {
   mothballed:  "rgba(255,255,255,0.05)",
 };
 
-const CATEGORY_ORDER: Record<string, number> = {
-  "jarvis-tools": 0,
-  arcade: 1,
-  games: 2,
-  apps: 3,
-  standalone: 4,
-};
-
-// Shown as a sub-header within each lane. "" = uncategorised (rendered last, no header).
-const CATEGORY_LABEL: Record<string, string> = {
-  "jarvis-tools": "Jarvis Tools",
-  arcade: "🎮 Arcade",
-  games: "Games",
-  apps: "Apps",
-  standalone: "Standalone",
-};
-
 // --- helpers -----------------------------------------------------------------
 
 function timeAgo(iso: string): string {
@@ -104,12 +88,38 @@ function timeAgo(iso: string): string {
   return `${Math.round(d / 30)}mo`;
 }
 
-function sortCards(cards: Card[]): Card[] {
+// --- card ordering -----------------------------------------------------------
+// Layout prefs (manual order, collapsed lanes, sort mode) are persisted
+// server-side via /api/prefs — see src/lib/prefs.ts.
+
+const byName = (a: Card, b: Card) => a.name.localeCompare(b.name);
+
+// Apply a saved id order to a lane's cards; ids not in the saved order (e.g. a
+// newly auto-discovered project) fall to the end, alphabetically.
+function applyOrder(cards: Card[], order?: string[]): Card[] {
+  if (!order || order.length === 0) return [...cards].sort(byName);
+  const pos = new Map(order.map((id, i) => [id, i] as const));
   return [...cards].sort((a, b) => {
-    const ao = CATEGORY_ORDER[a.category ?? ""] ?? 99;
-    const bo = CATEGORY_ORDER[b.category ?? ""] ?? 99;
-    return ao - bo || a.name.localeCompare(b.name);
+    const ai = pos.get(a.id) ?? Infinity;
+    const bi = pos.get(b.id) ?? Infinity;
+    return ai !== bi ? ai - bi : byName(a, b);
   });
+}
+
+// Order a lane's cards for the active sort mode.
+function laneCards(cards: Card[], sort: SortMode, order?: string[]): Card[] {
+  if (sort === "custom") return applyOrder(cards, order);
+  const arr = [...cards];
+  if (sort === "name") return arr.sort(byName);
+  if (sort === "recent") {
+    return arr.sort((a, b) => {
+      const at = a.lastCommit ? Date.parse(a.lastCommit) : 0;
+      const bt = b.lastCommit ? Date.parse(b.lastCommit) : 0;
+      return bt - at || byName(a, b);
+    });
+  }
+  // backlog — most open items first
+  return arr.sort((a, b) => (b.backlog ?? 0) - (a.backlog ?? 0) || byName(a, b));
 }
 
 const ENV_URLS: Record<string, { label: string; url: string }> = {
@@ -134,6 +144,46 @@ export default function Dashboard({ env }: { env?: string | null }) {
   const [health, setHealth] = useState<HealthMap>({});
   const [loading, setLoading] = useState(true);
   const [now, setNow] = useState(0);
+  const [prefs, setPrefs] = useState<Prefs>(DEFAULT_PREFS);
+  const [filter, setFilter] = useState("");
+  const prefsLoaded = useRef(false);
+
+  // Load the saved layout from the server once on mount.
+  useEffect(() => {
+    let alive = true;
+    fetch("/api/prefs", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((p: Prefs) => { if (alive) setPrefs(p); })
+      .catch(() => { /* server down → keep defaults */ })
+      .finally(() => { prefsLoaded.current = true; });
+    return () => { alive = false; };
+  }, []);
+
+  // Apply + persist a layout change. Skips writes until the initial load resolves
+  // so we never clobber saved prefs with the default state on first paint.
+  const persist = useCallback((next: Prefs) => {
+    setPrefs(next);
+    if (!prefsLoaded.current) return;
+    fetch("/api/prefs", {
+      method: "PUT",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(next),
+    }).catch(() => { /* offline — local state still updated */ });
+  }, []);
+
+  const toggleCollapse = (lane: Lane) =>
+    persist({ ...prefs, collapsed: { ...prefs.collapsed, [lane]: !prefs.collapsed[lane] } });
+  const reorderLane = (lane: Lane, ids: string[]) =>
+    persist({ ...prefs, order: { ...prefs.order, [lane]: ids } });
+  const setSort = (sort: SortMode) => persist({ ...prefs, sort });
+  const setAllCollapsed = (collapsed: boolean) =>
+    persist({ ...prefs, collapsed: Object.fromEntries(LANE_ORDER.map((l) => [l, collapsed])) });
+  const resetLayout = () => persist(DEFAULT_PREFS);
+
+  const hasCustomLayout =
+    prefs.sort !== "custom" ||
+    LANE_ORDER.some((l) => (prefs.order[l]?.length ?? 0) > 0 || prefs.collapsed[l]);
+  const allCollapsed = LANE_ORDER.every((l) => prefs.collapsed[l]);
 
   const refreshCards = useCallback(async () => {
     try {
@@ -163,13 +213,22 @@ export default function Dashboard({ env }: { env?: string | null }) {
     return () => clearInterval(t);
   }, [refreshCards, refreshHealth]);
 
+  const q = filter.trim().toLowerCase();
+  const filtering = q.length > 0;
+  const filtered = filtering
+    ? cards.filter((c) =>
+        c.name.toLowerCase().includes(q) || (c.description ?? "").toLowerCase().includes(q))
+    : cards;
+
   const byLane: Record<Lane, Card[]> = { live: [], in_progress: [], mothballed: [] };
-  for (const card of cards) {
+  for (const card of filtered) {
     (byLane[card.lane] ?? byLane.in_progress).push(card);
   }
 
-  const liveCount = byLane.live.length;
+  // Header stats reflect the full inventory, not the current filter.
+  const liveCount = cards.filter((c) => c.lane === "live").length;
   const totalCount = cards.length;
+  const matchCount = filtered.length;
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--base)" }}>
@@ -182,21 +241,43 @@ export default function Dashboard({ env }: { env?: string | null }) {
           env={env}
           view={view}
           onViewChange={setView}
+          canReset={view === "projects" && hasCustomLayout}
+          onReset={resetLayout}
         />
 
-        <main style={{ marginTop: 28, display: "flex", flexDirection: "column", gap: 32 }}>
+        {view === "projects" && !loading && cards.length > 0 && (
+          <ControlsBar
+            filter={filter}
+            onFilter={setFilter}
+            sort={prefs.sort}
+            onSort={setSort}
+            allCollapsed={allCollapsed}
+            onToggleAll={() => setAllCollapsed(!allCollapsed)}
+            filtering={filtering}
+            matchCount={matchCount}
+            totalCount={totalCount}
+          />
+        )}
+
+        <main style={{ marginTop: 20, display: "flex", flexDirection: "column", gap: 32 }}>
           {view === "health" ? (
             <HealthTab />
           ) : loading ? (
             <LoadingState />
           ) : cards.length === 0 ? (
             <EmptyState />
+          ) : filtering && matchCount === 0 ? (
+            <NoMatches query={filter} />
           ) : (
             LANE_ORDER.map((lane) => (
               <LaneSection
                 key={lane}
                 lane={lane}
-                cards={sortCards(byLane[lane])}
+                cards={laneCards(byLane[lane], prefs.sort, prefs.order[lane])}
+                collapsed={filtering ? false : !!prefs.collapsed[lane]}
+                draggable={prefs.sort === "custom" && !filtering}
+                onToggleCollapse={() => toggleCollapse(lane)}
+                onReorder={(ids) => reorderLane(lane, ids)}
                 health={health}
                 now={now}
               />
@@ -235,13 +316,15 @@ function EnvBanner({ env }: { env: string }) {
 // --- header ------------------------------------------------------------------
 
 function Header({
-  liveCount, totalCount, env, view, onViewChange,
+  liveCount, totalCount, env, view, onViewChange, canReset, onReset,
 }: {
   liveCount: number;
   totalCount: number;
   env?: string | null;
   view: View;
   onViewChange: (v: View) => void;
+  canReset: boolean;
+  onReset: () => void;
 }) {
   const envLink = env ? ENV_URLS[env.toLowerCase()] : ENV_URLS["prod"];
 
@@ -281,6 +364,25 @@ function Header({
 
       {/* Right side */}
       <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+        {canReset && (
+          <button
+            onClick={onReset}
+            title="Reset card order & collapsed sections"
+            style={{
+              fontSize: 11, color: "var(--text-dim)",
+              background: "transparent", cursor: "pointer",
+              letterSpacing: "0.04em",
+              padding: "5px 10px",
+              border: "1px solid var(--border)",
+              borderRadius: 6,
+              transition: "color 0.15s, border-color 0.15s",
+            }}
+            onMouseEnter={e => { e.currentTarget.style.color = "var(--text)"; e.currentTarget.style.borderColor = "var(--border-mid)"; }}
+            onMouseLeave={e => { e.currentTarget.style.color = "var(--text-dim)"; e.currentTarget.style.borderColor = "var(--border)"; }}
+          >
+            ⟲ Layout
+          </button>
+        )}
         {envLink && (
           <a
             href={envLink.url}
@@ -359,23 +461,318 @@ function EmptyState() {
   );
 }
 
+function NoMatches({ query }: { query: string }) {
+  return (
+    <div style={{ padding: "40px 0", textAlign: "center", color: "var(--text-muted)", fontSize: 13 }}>
+      No projects match “{query.trim()}”.
+    </div>
+  );
+}
+
+// --- controls bar (filter / sort / collapse-all) -----------------------------
+
+function ControlsBar({
+  filter, onFilter, sort, onSort, allCollapsed, onToggleAll, filtering, matchCount, totalCount,
+}: {
+  filter: string;
+  onFilter: (v: string) => void;
+  sort: SortMode;
+  onSort: (s: SortMode) => void;
+  allCollapsed: boolean;
+  onToggleAll: () => void;
+  filtering: boolean;
+  matchCount: number;
+  totalCount: number;
+}) {
+  return (
+    <div style={{ marginTop: 14, display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+      {/* Filter */}
+      <div style={{ position: "relative", flex: "1 1 220px", maxWidth: 340 }}>
+        <span style={{
+          position: "absolute", left: 10, top: "50%", transform: "translateY(-50%)",
+          fontSize: 12, color: "var(--text-muted)", pointerEvents: "none",
+        }}>⌕</span>
+        <input
+          value={filter}
+          onChange={(e) => onFilter(e.target.value)}
+          placeholder="Filter projects…"
+          aria-label="Filter projects"
+          style={{
+            width: "100%", padding: "7px 26px", boxSizing: "border-box",
+            background: "var(--surface)", border: "1px solid var(--border)",
+            borderRadius: 8, color: "var(--text)", fontSize: 12, outline: "none",
+            transition: "border-color 0.15s",
+          }}
+          onFocus={(e) => (e.currentTarget.style.borderColor = "var(--border-mid)")}
+          onBlur={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
+        />
+        {filter && (
+          <button
+            onClick={() => onFilter("")}
+            title="Clear filter"
+            aria-label="Clear filter"
+            style={{
+              position: "absolute", right: 6, top: "50%", transform: "translateY(-50%)",
+              background: "none", border: "none", color: "var(--text-muted)",
+              cursor: "pointer", fontSize: 15, lineHeight: 1, padding: "2px 4px",
+            }}
+          >×</button>
+        )}
+      </div>
+
+      {filtering && (
+        <span style={{ fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.03em" }}>
+          {matchCount} of {totalCount}
+        </span>
+      )}
+
+      <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 8 }}>
+        <label style={{
+          display: "flex", alignItems: "center", gap: 6,
+          fontSize: 11, color: "var(--text-muted)", letterSpacing: "0.04em",
+        }}>
+          Sort
+          <select
+            value={sort}
+            onChange={(e) => onSort(e.target.value as SortMode)}
+            style={{
+              background: "var(--surface)", color: "var(--text)",
+              border: "1px solid var(--border)", borderRadius: 6,
+              padding: "5px 8px", fontSize: 11, cursor: "pointer", outline: "none",
+            }}
+          >
+            {SORT_MODES.map((m) => (
+              <option key={m} value={m} style={{ background: "var(--surface)" }}>{SORT_LABEL[m]}</option>
+            ))}
+          </select>
+        </label>
+
+        <button
+          onClick={onToggleAll}
+          style={{
+            fontSize: 11, color: "var(--text-dim)", background: "transparent",
+            cursor: "pointer", letterSpacing: "0.04em", padding: "5px 10px",
+            border: "1px solid var(--border)", borderRadius: 6,
+            transition: "color 0.15s, border-color 0.15s",
+          }}
+          onMouseEnter={(e) => { e.currentTarget.style.color = "var(--text)"; e.currentTarget.style.borderColor = "var(--border-mid)"; }}
+          onMouseLeave={(e) => { e.currentTarget.style.color = "var(--text-dim)"; e.currentTarget.style.borderColor = "var(--border)"; }}
+        >
+          {allCollapsed ? "Expand all" : "Collapse all"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // --- lane section ------------------------------------------------------------
 
-function LaneSection({ lane, cards, health, now }: {
+function LaneSection({ lane, cards, collapsed, draggable, onToggleCollapse, onReorder, health, now }: {
   lane: Lane;
   cards: Card[];
+  collapsed: boolean;
+  draggable: boolean;
+  onToggleCollapse: () => void;
+  onReorder: (ids: string[]) => void;
   health: HealthMap;
   now: number;
 }) {
+  // Local id order drives rendering so a drag reorders instantly; it re-syncs from
+  // props (the persisted order) whenever a drag isn't in progress.
+  const [localIds, setLocalIds] = useState<string[]>(() => cards.map((c) => c.id));
+  const [draggingId, setDraggingId] = useState<string | null>(null);
+  const [overId, setOverId] = useState<string | null>(null);
+  const idsRef = useRef(localIds);
+  idsRef.current = localIds;
+  const dragRef = useRef<string | null>(null); // active drag id (drives logic; state is for styling)
+  const overRef = useRef<string | null>(null); // last card we reordered onto (dedupes re-entry)
+
+  // Pointer-drag machinery. Mouse picks a card up on a small move; touch long-presses
+  // to pick up, so a plain finger-swipe still scrolls the page.
+  const gridRef = useRef<HTMLDivElement>(null);
+  const activePointer = useRef<number | null>(null);
+  const pressTimer = useRef<number | null>(null);
+  const startPt = useRef({ x: 0, y: 0 });
+  const winMoveUp = useRef<{ move: (e: PointerEvent) => void; up: (e: PointerEvent) => void } | null>(null);
+  const preventTouch = useRef<((e: TouchEvent) => void) | null>(null);
+  const scrollDir = useRef(0);
+  const scrollRAF = useRef<number | null>(null);
+  // Floating drag-preview ("ghost") that follows the pointer.
+  const ghostRef = useRef<HTMLDivElement>(null);
+  const grabOffset = useRef({ x: 0, y: 0 }); // pointer position within the grabbed card
+  const ghostW = useRef(0);                  // grabbed card's width, so the ghost matches
+  const lastPointer = useRef({ x: 0, y: 0 });
+
+  function positionGhost() {
+    if (ghostRef.current) {
+      ghostRef.current.style.transform =
+        `translate(${lastPointer.current.x - grabOffset.current.x}px, ${lastPointer.current.y - grabOffset.current.y}px)`;
+    }
+  }
+
+  useEffect(() => {
+    if (!draggingId) setLocalIds(cards.map((c) => c.id));
+  }, [cards, draggingId]);
+
+  // If the lane unmounts mid-gesture, drop any window listeners / timers.
+  useEffect(() => () => teardownDrag(), []); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (cards.length === 0) return null;
+
+  const byId = new Map(cards.map((c) => [c.id, c]));
+  const ordered = localIds.map((id) => byId.get(id)).filter(Boolean) as Card[];
+  const ghostCard = draggingId ? byId.get(draggingId) : undefined;
+
+  function startDrag(id: string) {
+    dragRef.current = id;
+    overRef.current = id;
+    setDraggingId(id);
+    setOverId(id);
+    // Block the browser's own scroll for the duration of a touch drag.
+    const pt = (e: TouchEvent) => e.preventDefault();
+    preventTouch.current = pt;
+    window.addEventListener("touchmove", pt, { passive: false });
+  }
+
+  // Move the dragged card to the target's slot — but only when the pointer crosses
+  // onto a *new* card, so hovering within one card can't oscillate the order.
+  function moveOver(targetId: string) {
+    const dragId = dragRef.current;
+    if (!dragId || dragId === targetId || overRef.current === targetId) return;
+    overRef.current = targetId;
+    setOverId(targetId);
+    setLocalIds((prev) => {
+      const cur = [...prev];
+      const fi = cur.indexOf(dragId);
+      const ti = cur.indexOf(targetId);
+      if (fi < 0 || ti < 0) return prev;
+      cur.splice(ti, 0, cur.splice(fi, 1)[0]);
+      return cur;
+    });
+  }
+
+  // Which card in *this* lane is under the pointer — by geometry, so it doesn't
+  // depend on z-order/pointer-events. Returns the containing card, else the nearest.
+  function cardAt(x: number, y: number): string | null {
+    const els = gridRef.current?.querySelectorAll<HTMLElement>("[data-card-id]");
+    if (!els) return null;
+    let best: string | null = null;
+    let bestDist = Infinity;
+    for (const el of els) {
+      const r = el.getBoundingClientRect();
+      const id = el.getAttribute("data-card-id");
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return id;
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const d = Math.hypot(x - cx, y - cy);
+      if (d < bestDist) { bestDist = d; best = id; }
+    }
+    return best;
+  }
+
+  // Scroll the page when a drag hovers near the top/bottom edge (for long lists on
+  // small screens).
+  function edgeAutoScroll(clientY: number) {
+    const margin = 90;
+    const h = window.innerHeight;
+    scrollDir.current = clientY < margin ? -1 : clientY > h - margin ? 1 : 0;
+    if (scrollDir.current !== 0 && scrollRAF.current == null) {
+      const tick = () => {
+        if (scrollDir.current === 0) { scrollRAF.current = null; return; }
+        window.scrollBy(0, scrollDir.current * 12);
+        scrollRAF.current = requestAnimationFrame(tick);
+      };
+      scrollRAF.current = requestAnimationFrame(tick);
+    }
+  }
+
+  function teardownDrag() {
+    if (pressTimer.current != null) { clearTimeout(pressTimer.current); pressTimer.current = null; }
+    if (scrollRAF.current != null) { cancelAnimationFrame(scrollRAF.current); scrollRAF.current = null; }
+    scrollDir.current = 0;
+    if (winMoveUp.current) {
+      window.removeEventListener("pointermove", winMoveUp.current.move);
+      window.removeEventListener("pointerup", winMoveUp.current.up);
+      window.removeEventListener("pointercancel", winMoveUp.current.up);
+      winMoveUp.current = null;
+    }
+    if (preventTouch.current) {
+      window.removeEventListener("touchmove", preventTouch.current);
+      preventTouch.current = null;
+    }
+    activePointer.current = null;
+  }
+
+  function endDrag() {
+    const wasDragging = dragRef.current != null;
+    dragRef.current = null;
+    overRef.current = null;
+    teardownDrag();
+    if (wasDragging) {
+      setDraggingId(null);
+      setOverId(null);
+      onReorder(idsRef.current);
+    }
+  }
+
+  // Whole card is the handle. Mouse picks up on a small move (so clicks/text still
+  // work); touch long-presses to pick up (so a plain swipe scrolls). A grab that
+  // starts on a link/button is ignored so those stay tappable.
+  function onCardPointerDown(e: React.PointerEvent, id: string) {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    if ((e.target as HTMLElement).closest("a,button")) return;
+    if (activePointer.current != null) return;
+    activePointer.current = e.pointerId;
+    startPt.current = { x: e.clientX, y: e.clientY };
+    lastPointer.current = { x: e.clientX, y: e.clientY };
+    // Remember where in the card we grabbed + its width, so the floating preview
+    // sits under the cursor and matches the card's size.
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    grabOffset.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    ghostW.current = rect.width;
+
+    const move = (ev: PointerEvent) => {
+      if (ev.pointerId !== activePointer.current) return;
+      lastPointer.current = { x: ev.clientX, y: ev.clientY };
+      if (dragRef.current == null) {
+        const dist = Math.hypot(ev.clientX - startPt.current.x, ev.clientY - startPt.current.y);
+        if (ev.pointerType === "mouse") {
+          if (dist > 5) startDrag(id);
+        } else if (dist > 10) {
+          teardownDrag(); // moved before the long-press fired → treat as a scroll
+        }
+        return;
+      }
+      ev.preventDefault();
+      positionGhost();
+      const tid = cardAt(ev.clientX, ev.clientY);
+      if (tid) moveOver(tid);
+      edgeAutoScroll(ev.clientY);
+    };
+    const up = (ev: PointerEvent) => {
+      if (ev.pointerId !== activePointer.current) return;
+      endDrag();
+    };
+
+    winMoveUp.current = { move, up };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+
+    if (e.pointerType !== "mouse") {
+      pressTimer.current = window.setTimeout(() => { pressTimer.current = null; startDrag(id); }, 180);
+    }
+  }
 
   return (
     <section>
-      {/* Lane header */}
-      <div style={{
-        display: "flex", alignItems: "center", gap: 10,
-        marginBottom: 14,
-      }}>
+      <button
+        className="lane-toggle"
+        data-collapsed={collapsed}
+        onClick={onToggleCollapse}
+        aria-expanded={!collapsed}
+      >
+        <span className="lane-chevron" style={{ fontSize: 9, color: LANE_COLOR[lane], width: 8 }}>▾</span>
         <span style={{
           display: "inline-block",
           width: 7, height: 7, borderRadius: "50%",
@@ -398,41 +795,78 @@ function LaneSection({ lane, cards, health, now }: {
         }}>
           {cards.length}
         </span>
-        <div style={{ flex: 1, height: 1, background: "var(--border)", marginLeft: 4 }} />
-      </div>
+        <span style={{ flex: 1, height: 1, background: "var(--border)", marginLeft: 4 }} />
+      </button>
 
-      {groupByCategory(cards).map(({ cat, items }) => (
-        <div key={cat || "_"} style={{ marginBottom: 14 }}>
-          {CATEGORY_LABEL[cat] && (
-            <div style={{
-              fontSize: 10, fontWeight: 600, letterSpacing: "0.08em",
-              textTransform: "uppercase", color: "var(--text-muted)",
-              margin: "0 0 8px 17px",
-            }}>
-              {CATEGORY_LABEL[cat]}
-            </div>
-          )}
-          <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fill, minmax(270px, 1fr))" }}>
-            {items.map((card) => (
+      {!collapsed && (
+        <div ref={gridRef} style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fill, minmax(270px, 1fr))" }}>
+          {ordered.map((card) =>
+            draggable ? (
+              <DraggableCard
+                key={card.id}
+                card={card}
+                health={health}
+                now={now}
+                dragging={draggingId === card.id}
+                dropTarget={overId === card.id && draggingId !== card.id}
+                onPointerDown={(e) => onCardPointerDown(e, card.id)}
+              />
+            ) : (
               <ProjectCard key={card.id} card={card} health={health} now={now} />
-            ))}
+            ),
+          )}
+        </div>
+      )}
+
+      {ghostCard && (
+        <div
+          ref={ghostRef}
+          aria-hidden
+          className="drag-ghost"
+          style={{
+            position: "fixed", top: 0, left: 0, width: ghostW.current, zIndex: 1000,
+            pointerEvents: "none", opacity: 0.95,
+            transform: `translate(${lastPointer.current.x - grabOffset.current.x}px, ${lastPointer.current.y - grabOffset.current.y}px)`,
+          }}
+        >
+          <div style={{
+            transform: "scale(1.03) rotate(0.6deg)",
+            boxShadow: "0 16px 38px rgba(0,0,0,0.55)",
+            borderRadius: 10,
+          }}>
+            <ProjectCard card={ghostCard} health={health} now={now} />
           </div>
         </div>
-      ))}
+      )}
     </section>
   );
 }
 
-// Group already-sorted cards into consecutive category runs (preserves sort order).
-function groupByCategory(cards: Card[]): { cat: string; items: Card[] }[] {
-  const groups: { cat: string; items: Card[] }[] = [];
-  for (const card of cards) {
-    const cat = card.category ?? "";
-    const last = groups[groups.length - 1];
-    if (last && last.cat === cat) last.items.push(card);
-    else groups.push({ cat, items: [card] });
-  }
-  return groups;
+// A ProjectCard made draggable via Pointer Events (works for mouse, touch and pen)
+// for manual reordering. The whole card is the handle; the drag controller in
+// LaneSection ignores grabs that begin on the action links so those stay tappable.
+// `touch-action: pan-y` lets a plain vertical swipe scroll the page normally — the
+// controller only takes over once a touch has long-pressed to pick the card up.
+function DraggableCard({
+  card, health, now, dragging, dropTarget, onPointerDown,
+}: {
+  card: Card;
+  health: HealthMap;
+  now: number;
+  dragging: boolean;
+  dropTarget: boolean;
+  onPointerDown: (e: React.PointerEvent) => void;
+}) {
+  return (
+    <div
+      className={`drag-cell${dragging ? " dragging" : ""}${dropTarget ? " drop-target" : ""}`}
+      data-card-id={card.id}
+      onPointerDown={onPointerDown}
+      style={{ cursor: "grab", touchAction: "pan-y" }}
+    >
+      <ProjectCard card={card} health={health} now={now} />
+    </div>
+  );
 }
 
 // --- project card ------------------------------------------------------------
@@ -532,6 +966,7 @@ function ProjectCard({ card, health, now }: {
             href={card.liveUrl}
             target="_blank"
             rel="noreferrer"
+            draggable={false}
             style={{
               fontSize: 11, fontWeight: 600,
               padding: "5px 12px", borderRadius: 6,
@@ -540,6 +975,7 @@ function ProjectCard({ card, health, now }: {
               color: "var(--indigo-bright)",
               textDecoration: "none",
               letterSpacing: "0.04em",
+              cursor: "pointer",
               transition: "background 0.15s",
             }}
             onMouseEnter={e => (e.currentTarget.style.background = "rgba(120,100,220,0.25)")}
@@ -553,6 +989,7 @@ function ProjectCard({ card, health, now }: {
             href={card.repoUrl}
             target="_blank"
             rel="noreferrer"
+            draggable={false}
             style={{
               fontSize: 11, fontWeight: 500,
               padding: "5px 12px", borderRadius: 6,
@@ -561,6 +998,7 @@ function ProjectCard({ card, health, now }: {
               color: "var(--text-dim)",
               textDecoration: "none",
               letterSpacing: "0.04em",
+              cursor: "pointer",
               transition: "border-color 0.15s, color 0.15s",
             }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--border-mid)"; e.currentTarget.style.color = "var(--text)"; }}

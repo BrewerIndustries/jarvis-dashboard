@@ -1,6 +1,6 @@
 // Reads the unified project registry produced by scripts/sync-registry.mjs, which
-// aggregates each repo's committed .jarvis.json. This is the single source of truth
-// the dashboard and the launcher share: declared lifecycle status drives the LANE;
+// aggregates each repo's committed .jarvis.json. This is the dashboard's single
+// source of truth: declared lifecycle status drives the LANE;
 // the /api/health ping drives the live/down badge.
 //
 // If the registry hasn't been synced yet, registry() returns [] and the dashboard
