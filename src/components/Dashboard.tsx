@@ -597,6 +597,18 @@ function LaneSection({ lane, cards, collapsed, draggable, onToggleCollapse, onRe
   const preventTouch = useRef<((e: TouchEvent) => void) | null>(null);
   const scrollDir = useRef(0);
   const scrollRAF = useRef<number | null>(null);
+  // Floating drag-preview ("ghost") that follows the pointer.
+  const ghostRef = useRef<HTMLDivElement>(null);
+  const grabOffset = useRef({ x: 0, y: 0 }); // pointer position within the grabbed card
+  const ghostW = useRef(0);                  // grabbed card's width, so the ghost matches
+  const lastPointer = useRef({ x: 0, y: 0 });
+
+  function positionGhost() {
+    if (ghostRef.current) {
+      ghostRef.current.style.transform =
+        `translate(${lastPointer.current.x - grabOffset.current.x}px, ${lastPointer.current.y - grabOffset.current.y}px)`;
+    }
+  }
 
   useEffect(() => {
     if (!draggingId) setLocalIds(cards.map((c) => c.id));
@@ -609,6 +621,7 @@ function LaneSection({ lane, cards, collapsed, draggable, onToggleCollapse, onRe
 
   const byId = new Map(cards.map((c) => [c.id, c]));
   const ordered = localIds.map((id) => byId.get(id)).filter(Boolean) as Card[];
+  const ghostCard = draggingId ? byId.get(draggingId) : undefined;
 
   function startDrag(id: string) {
     dragRef.current = id;
@@ -711,9 +724,16 @@ function LaneSection({ lane, cards, collapsed, draggable, onToggleCollapse, onRe
     if (activePointer.current != null) return;
     activePointer.current = e.pointerId;
     startPt.current = { x: e.clientX, y: e.clientY };
+    lastPointer.current = { x: e.clientX, y: e.clientY };
+    // Remember where in the card we grabbed + its width, so the floating preview
+    // sits under the cursor and matches the card's size.
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    grabOffset.current = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    ghostW.current = rect.width;
 
     const move = (ev: PointerEvent) => {
       if (ev.pointerId !== activePointer.current) return;
+      lastPointer.current = { x: ev.clientX, y: ev.clientY };
       if (dragRef.current == null) {
         const dist = Math.hypot(ev.clientX - startPt.current.x, ev.clientY - startPt.current.y);
         if (ev.pointerType === "mouse") {
@@ -724,6 +744,7 @@ function LaneSection({ lane, cards, collapsed, draggable, onToggleCollapse, onRe
         return;
       }
       ev.preventDefault();
+      positionGhost();
       const tid = cardAt(ev.clientX, ev.clientY);
       if (tid) moveOver(tid);
       edgeAutoScroll(ev.clientY);
@@ -794,6 +815,27 @@ function LaneSection({ lane, cards, collapsed, draggable, onToggleCollapse, onRe
               <ProjectCard key={card.id} card={card} health={health} now={now} />
             ),
           )}
+        </div>
+      )}
+
+      {ghostCard && (
+        <div
+          ref={ghostRef}
+          aria-hidden
+          className="drag-ghost"
+          style={{
+            position: "fixed", top: 0, left: 0, width: ghostW.current, zIndex: 1000,
+            pointerEvents: "none", opacity: 0.95,
+            transform: `translate(${lastPointer.current.x - grabOffset.current.x}px, ${lastPointer.current.y - grabOffset.current.y}px)`,
+          }}
+        >
+          <div style={{
+            transform: "scale(1.03) rotate(0.6deg)",
+            boxShadow: "0 16px 38px rgba(0,0,0,0.55)",
+            borderRadius: 10,
+          }}>
+            <ProjectCard card={ghostCard} health={health} now={now} />
+          </div>
         </div>
       )}
     </section>
