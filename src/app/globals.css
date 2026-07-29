@@ -71,19 +71,9 @@ html, body {
   animation: fade-in 0.2s ease forwards;
 }
 
-/* Drag-to-reorder grip — sits in the card's left gutter, reveals on hover */
+/* Drag-to-reorder — the whole card is the handle (cursor set inline). */
 .drag-cell { position: relative; }
-.drag-grip {
-  position: absolute; left: 0; top: 0; bottom: 0; width: 16px;
-  display: flex; align-items: center; justify-content: center;
-  color: var(--text-muted); font-size: 11px; line-height: 1;
-  cursor: grab; opacity: 0; transition: opacity 0.15s; z-index: 3;
-  user-select: none; -webkit-user-select: none;
-}
-.drag-cell:hover .drag-grip { opacity: 0.4; }
-.drag-grip:hover { opacity: 0.85; }
-.drag-grip:active { cursor: grabbing; }
-.drag-cell.dragging { opacity: 0.35; }
+.drag-cell.dragging { opacity: 0.35; cursor: grabbing; }
 .drag-cell.drop-target::after {
   content: ""; position: absolute; inset: -2px;
   border: 1px dashed var(--border-hi); border-radius: 12px;

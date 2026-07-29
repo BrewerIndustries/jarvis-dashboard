@@ -673,7 +673,7 @@ function LaneSection({ lane, cards, collapsed, draggable, onToggleCollapse, onRe
                 now={now}
                 dragging={draggingId === card.id}
                 dropTarget={overId === card.id && draggingId !== card.id}
-                onGripDragStart={() => startDrag(card.id)}
+                onBeginDrag={() => startDrag(card.id)}
                 onCardDragEnter={() => moveOver(card.id)}
                 onDragEnd={endDrag}
               />
@@ -687,45 +687,40 @@ function LaneSection({ lane, cards, collapsed, draggable, onToggleCollapse, onRe
   );
 }
 
-// A ProjectCard wrapped with a hover-reveal drag grip (HTML5 drag-and-drop).
-// Only the grip is draggable, so the card's links stay clickable; the whole card
-// is used as the drag image.
+// A ProjectCard made draggable (HTML5 drag-and-drop) for manual reordering.
+// The whole card is a drag handle; a drag that begins on the action links
+// (Launch / GitHub) is cancelled so those stay clickable.
 function DraggableCard({
-  card, health, now, dragging, dropTarget, onGripDragStart, onCardDragEnter, onDragEnd,
+  card, health, now, dragging, dropTarget, onBeginDrag, onCardDragEnter, onDragEnd,
 }: {
   card: Card;
   health: HealthMap;
   now: number;
   dragging: boolean;
   dropTarget: boolean;
-  onGripDragStart: () => void;
+  onBeginDrag: () => void;
   onCardDragEnter: () => void;
   onDragEnd: () => void;
 }) {
-  const ref = useRef<HTMLDivElement>(null);
-
   return (
     <div
-      ref={ref}
       className={`drag-cell${dragging ? " dragging" : ""}${dropTarget ? " drop-target" : ""}`}
+      draggable
+      style={{ cursor: "grab" }}
+      onDragStart={(e) => {
+        // Grabbing a link/button shouldn't drag the card — let the click through.
+        if ((e.target as HTMLElement).closest("a,button")) {
+          e.preventDefault();
+          return;
+        }
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", card.id);
+        onBeginDrag();
+      }}
       onDragEnter={onCardDragEnter}
       onDragOver={(e) => e.preventDefault()}
+      onDragEnd={onDragEnd}
     >
-      <span
-        className="drag-grip"
-        draggable
-        title="Drag to reorder"
-        aria-label={`Reorder ${card.name}`}
-        onDragStart={(e) => {
-          e.dataTransfer.effectAllowed = "move";
-          e.dataTransfer.setData("text/plain", card.id);
-          if (ref.current) e.dataTransfer.setDragImage(ref.current, 24, 20);
-          onGripDragStart();
-        }}
-        onDragEnd={onDragEnd}
-      >
-        ⠿
-      </span>
       <ProjectCard card={card} health={health} now={now} />
     </div>
   );
@@ -828,6 +823,7 @@ function ProjectCard({ card, health, now }: {
             href={card.liveUrl}
             target="_blank"
             rel="noreferrer"
+            draggable={false}
             style={{
               fontSize: 11, fontWeight: 600,
               padding: "5px 12px", borderRadius: 6,
@@ -836,6 +832,7 @@ function ProjectCard({ card, health, now }: {
               color: "var(--indigo-bright)",
               textDecoration: "none",
               letterSpacing: "0.04em",
+              cursor: "pointer",
               transition: "background 0.15s",
             }}
             onMouseEnter={e => (e.currentTarget.style.background = "rgba(120,100,220,0.25)")}
@@ -849,6 +846,7 @@ function ProjectCard({ card, health, now }: {
             href={card.repoUrl}
             target="_blank"
             rel="noreferrer"
+            draggable={false}
             style={{
               fontSize: 11, fontWeight: 500,
               padding: "5px 12px", borderRadius: 6,
@@ -857,6 +855,7 @@ function ProjectCard({ card, health, now }: {
               color: "var(--text-dim)",
               textDecoration: "none",
               letterSpacing: "0.04em",
+              cursor: "pointer",
               transition: "border-color 0.15s, color 0.15s",
             }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = "var(--border-mid)"; e.currentTarget.style.color = "var(--text)"; }}
