@@ -585,11 +585,25 @@ function LaneSection({ lane, cards, collapsed, draggable, onToggleCollapse, onRe
   const idsRef = useRef(localIds);
   idsRef.current = localIds;
   const dragRef = useRef<string | null>(null); // active drag id (drives logic; state is for styling)
-  const overRef = useRef<string | null>(null); // last card we reordered onto (dedupes dragenter)
+  const overRef = useRef<string | null>(null); // last card we reordered onto (dedupes re-entry)
+
+  // Pointer-drag machinery. Mouse picks a card up on a small move; touch long-presses
+  // to pick up, so a plain finger-swipe still scrolls the page.
+  const gridRef = useRef<HTMLDivElement>(null);
+  const activePointer = useRef<number | null>(null);
+  const pressTimer = useRef<number | null>(null);
+  const startPt = useRef({ x: 0, y: 0 });
+  const winMoveUp = useRef<{ move: (e: PointerEvent) => void; up: (e: PointerEvent) => void } | null>(null);
+  const preventTouch = useRef<((e: TouchEvent) => void) | null>(null);
+  const scrollDir = useRef(0);
+  const scrollRAF = useRef<number | null>(null);
 
   useEffect(() => {
     if (!draggingId) setLocalIds(cards.map((c) => c.id));
   }, [cards, draggingId]);
+
+  // If the lane unmounts mid-gesture, drop any window listeners / timers.
+  useEffect(() => () => teardownDrag(), []); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (cards.length === 0) return null;
 
@@ -601,6 +615,10 @@ function LaneSection({ lane, cards, collapsed, draggable, onToggleCollapse, onRe
     overRef.current = id;
     setDraggingId(id);
     setOverId(id);
+    // Block the browser's own scroll for the duration of a touch drag.
+    const pt = (e: TouchEvent) => e.preventDefault();
+    preventTouch.current = pt;
+    window.addEventListener("touchmove", pt, { passive: false });
   }
 
   // Move the dragged card to the target's slot — but only when the pointer crosses
@@ -620,12 +638,109 @@ function LaneSection({ lane, cards, collapsed, draggable, onToggleCollapse, onRe
     });
   }
 
+  // Which card in *this* lane is under the pointer — by geometry, so it doesn't
+  // depend on z-order/pointer-events. Returns the containing card, else the nearest.
+  function cardAt(x: number, y: number): string | null {
+    const els = gridRef.current?.querySelectorAll<HTMLElement>("[data-card-id]");
+    if (!els) return null;
+    let best: string | null = null;
+    let bestDist = Infinity;
+    for (const el of els) {
+      const r = el.getBoundingClientRect();
+      const id = el.getAttribute("data-card-id");
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return id;
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const d = Math.hypot(x - cx, y - cy);
+      if (d < bestDist) { bestDist = d; best = id; }
+    }
+    return best;
+  }
+
+  // Scroll the page when a drag hovers near the top/bottom edge (for long lists on
+  // small screens).
+  function edgeAutoScroll(clientY: number) {
+    const margin = 90;
+    const h = window.innerHeight;
+    scrollDir.current = clientY < margin ? -1 : clientY > h - margin ? 1 : 0;
+    if (scrollDir.current !== 0 && scrollRAF.current == null) {
+      const tick = () => {
+        if (scrollDir.current === 0) { scrollRAF.current = null; return; }
+        window.scrollBy(0, scrollDir.current * 12);
+        scrollRAF.current = requestAnimationFrame(tick);
+      };
+      scrollRAF.current = requestAnimationFrame(tick);
+    }
+  }
+
+  function teardownDrag() {
+    if (pressTimer.current != null) { clearTimeout(pressTimer.current); pressTimer.current = null; }
+    if (scrollRAF.current != null) { cancelAnimationFrame(scrollRAF.current); scrollRAF.current = null; }
+    scrollDir.current = 0;
+    if (winMoveUp.current) {
+      window.removeEventListener("pointermove", winMoveUp.current.move);
+      window.removeEventListener("pointerup", winMoveUp.current.up);
+      window.removeEventListener("pointercancel", winMoveUp.current.up);
+      winMoveUp.current = null;
+    }
+    if (preventTouch.current) {
+      window.removeEventListener("touchmove", preventTouch.current);
+      preventTouch.current = null;
+    }
+    activePointer.current = null;
+  }
+
   function endDrag() {
+    const wasDragging = dragRef.current != null;
     dragRef.current = null;
     overRef.current = null;
-    setDraggingId(null);
-    setOverId(null);
-    onReorder(idsRef.current);
+    teardownDrag();
+    if (wasDragging) {
+      setDraggingId(null);
+      setOverId(null);
+      onReorder(idsRef.current);
+    }
+  }
+
+  // Whole card is the handle. Mouse picks up on a small move (so clicks/text still
+  // work); touch long-presses to pick up (so a plain swipe scrolls). A grab that
+  // starts on a link/button is ignored so those stay tappable.
+  function onCardPointerDown(e: React.PointerEvent, id: string) {
+    if (e.pointerType === "mouse" && e.button !== 0) return;
+    if ((e.target as HTMLElement).closest("a,button")) return;
+    if (activePointer.current != null) return;
+    activePointer.current = e.pointerId;
+    startPt.current = { x: e.clientX, y: e.clientY };
+
+    const move = (ev: PointerEvent) => {
+      if (ev.pointerId !== activePointer.current) return;
+      if (dragRef.current == null) {
+        const dist = Math.hypot(ev.clientX - startPt.current.x, ev.clientY - startPt.current.y);
+        if (ev.pointerType === "mouse") {
+          if (dist > 5) startDrag(id);
+        } else if (dist > 10) {
+          teardownDrag(); // moved before the long-press fired → treat as a scroll
+        }
+        return;
+      }
+      ev.preventDefault();
+      const tid = cardAt(ev.clientX, ev.clientY);
+      if (tid) moveOver(tid);
+      edgeAutoScroll(ev.clientY);
+    };
+    const up = (ev: PointerEvent) => {
+      if (ev.pointerId !== activePointer.current) return;
+      endDrag();
+    };
+
+    winMoveUp.current = { move, up };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", up);
+
+    if (e.pointerType !== "mouse") {
+      pressTimer.current = window.setTimeout(() => { pressTimer.current = null; startDrag(id); }, 180);
+    }
   }
 
   return (
@@ -663,7 +778,7 @@ function LaneSection({ lane, cards, collapsed, draggable, onToggleCollapse, onRe
       </button>
 
       {!collapsed && (
-        <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fill, minmax(270px, 1fr))" }}>
+        <div ref={gridRef} style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fill, minmax(270px, 1fr))" }}>
           {ordered.map((card) =>
             draggable ? (
               <DraggableCard
@@ -673,9 +788,7 @@ function LaneSection({ lane, cards, collapsed, draggable, onToggleCollapse, onRe
                 now={now}
                 dragging={draggingId === card.id}
                 dropTarget={overId === card.id && draggingId !== card.id}
-                onBeginDrag={() => startDrag(card.id)}
-                onCardDragEnter={() => moveOver(card.id)}
-                onDragEnd={endDrag}
+                onPointerDown={(e) => onCardPointerDown(e, card.id)}
               />
             ) : (
               <ProjectCard key={card.id} card={card} health={health} now={now} />
@@ -687,39 +800,27 @@ function LaneSection({ lane, cards, collapsed, draggable, onToggleCollapse, onRe
   );
 }
 
-// A ProjectCard made draggable (HTML5 drag-and-drop) for manual reordering.
-// The whole card is a drag handle; a drag that begins on the action links
-// (Launch / GitHub) is cancelled so those stay clickable.
+// A ProjectCard made draggable via Pointer Events (works for mouse, touch and pen)
+// for manual reordering. The whole card is the handle; the drag controller in
+// LaneSection ignores grabs that begin on the action links so those stay tappable.
+// `touch-action: pan-y` lets a plain vertical swipe scroll the page normally — the
+// controller only takes over once a touch has long-pressed to pick the card up.
 function DraggableCard({
-  card, health, now, dragging, dropTarget, onBeginDrag, onCardDragEnter, onDragEnd,
+  card, health, now, dragging, dropTarget, onPointerDown,
 }: {
   card: Card;
   health: HealthMap;
   now: number;
   dragging: boolean;
   dropTarget: boolean;
-  onBeginDrag: () => void;
-  onCardDragEnter: () => void;
-  onDragEnd: () => void;
+  onPointerDown: (e: React.PointerEvent) => void;
 }) {
   return (
     <div
       className={`drag-cell${dragging ? " dragging" : ""}${dropTarget ? " drop-target" : ""}`}
-      draggable
-      style={{ cursor: "grab" }}
-      onDragStart={(e) => {
-        // Grabbing a link/button shouldn't drag the card — let the click through.
-        if ((e.target as HTMLElement).closest("a,button")) {
-          e.preventDefault();
-          return;
-        }
-        e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/plain", card.id);
-        onBeginDrag();
-      }}
-      onDragEnter={onCardDragEnter}
-      onDragOver={(e) => e.preventDefault()}
-      onDragEnd={onDragEnd}
+      data-card-id={card.id}
+      onPointerDown={onPointerDown}
+      style={{ cursor: "grab", touchAction: "pan-y" }}
     >
       <ProjectCard card={card} health={health} now={now} />
     </div>
