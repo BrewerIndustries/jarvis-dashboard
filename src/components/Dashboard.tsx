@@ -628,6 +628,10 @@ function LaneSection({ lane, cards, collapsed, draggable, onToggleCollapse, onRe
     overRef.current = id;
     setDraggingId(id);
     setOverId(id);
+    // Suppress text selection across the page while dragging (a mouse sweep would
+    // otherwise highlight other cards' text), and clear any selection already begun.
+    document.body.classList.add("reordering");
+    window.getSelection()?.removeAllRanges();
     // Block the browser's own scroll for the duration of a touch drag.
     const pt = (e: TouchEvent) => e.preventDefault();
     preventTouch.current = pt;
@@ -700,6 +704,7 @@ function LaneSection({ lane, cards, collapsed, draggable, onToggleCollapse, onRe
       window.removeEventListener("touchmove", preventTouch.current);
       preventTouch.current = null;
     }
+    document.body.classList.remove("reordering");
     activePointer.current = null;
   }
 
