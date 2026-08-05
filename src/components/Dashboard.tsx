@@ -74,6 +74,24 @@ const LANE_DOT_BG: Record<Lane, string> = {
   mothballed:  "rgba(255,255,255,0.05)",
 };
 
+// iOS apps live in their own top-of-page section (they ship to the App Store /
+// TestFlight, not to a localhost port), so they're pulled out of the lane grid.
+// A repo opts in with `"category": "ios"` in its .jarvis.json.
+const IOS_CATEGORY = "ios";
+
+// For an iOS app the lane maps to a release stage rather than a running service.
+const IOS_STAGE_LABEL: Record<Lane, string> = {
+  live: "App Store",
+  in_progress: "In Dev",
+  mothballed: "Shelved",
+};
+
+const IOS_STAGE_COLOR: Record<Lane, string> = {
+  live: "var(--green)",
+  in_progress: "var(--indigo-bright)",
+  mothballed: "var(--text-dim)",
+};
+
 // --- helpers -----------------------------------------------------------------
 
 function timeAgo(iso: string): string {
@@ -220,8 +238,11 @@ export default function Dashboard({ env }: { env?: string | null }) {
         c.name.toLowerCase().includes(q) || (c.description ?? "").toLowerCase().includes(q))
     : cards;
 
+  // iOS apps render in their own section; everything else is grouped by lane.
+  const iosCards = filtered.filter((c) => c.category === IOS_CATEGORY);
   const byLane: Record<Lane, Card[]> = { live: [], in_progress: [], mothballed: [] };
   for (const card of filtered) {
+    if (card.category === IOS_CATEGORY) continue;
     (byLane[card.lane] ?? byLane.in_progress).push(card);
   }
 
@@ -269,19 +290,28 @@ export default function Dashboard({ env }: { env?: string | null }) {
           ) : filtering && matchCount === 0 ? (
             <NoMatches query={filter} />
           ) : (
-            LANE_ORDER.map((lane) => (
-              <LaneSection
-                key={lane}
-                lane={lane}
-                cards={laneCards(byLane[lane], prefs.sort, prefs.order[lane])}
-                collapsed={filtering ? false : !!prefs.collapsed[lane]}
-                draggable={prefs.sort === "custom" && !filtering}
-                onToggleCollapse={() => toggleCollapse(lane)}
-                onReorder={(ids) => reorderLane(lane, ids)}
-                health={health}
-                now={now}
-              />
-            ))
+            <>
+              {iosCards.length > 0 && (
+                <IOSAppsSection
+                  cards={laneCards(iosCards, prefs.sort)}
+                  health={health}
+                  now={now}
+                />
+              )}
+              {LANE_ORDER.map((lane) => (
+                <LaneSection
+                  key={lane}
+                  lane={lane}
+                  cards={laneCards(byLane[lane], prefs.sort, prefs.order[lane])}
+                  collapsed={filtering ? false : !!prefs.collapsed[lane]}
+                  draggable={prefs.sort === "custom" && !filtering}
+                  onToggleCollapse={() => toggleCollapse(lane)}
+                  onReorder={(ids) => reorderLane(lane, ids)}
+                  health={health}
+                  now={now}
+                />
+              ))}
+            </>
           )}
         </main>
 
@@ -562,6 +592,51 @@ function ControlsBar({
         </button>
       </div>
     </div>
+  );
+}
+
+// --- iOS apps section --------------------------------------------------------
+// Native iOS apps (category "ios") get their own section at the top of the grid.
+// They aren't health-pinged or reorderable — each card shows its release stage
+// (App Store / In Dev / Shelved) and links out to GitHub / the store listing.
+
+function IOSAppsSection({ cards, health, now }: {
+  cards: Card[];
+  health: HealthMap;
+  now: number;
+}) {
+  if (cards.length === 0) return null;
+  const accent = "var(--indigo-bright)";
+
+  return (
+    <section>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+        <span style={{
+          display: "inline-block", width: 7, height: 7, borderRadius: "50%",
+          background: accent, boxShadow: `0 0 6px ${accent}`, flexShrink: 0,
+        }} />
+        <span style={{
+          fontSize: 11, fontWeight: 700,
+          letterSpacing: "0.12em", textTransform: "uppercase", color: accent,
+        }}>
+          iOS Apps
+        </span>
+        <span style={{
+          fontSize: 10, color: "var(--text-muted)",
+          background: "var(--indigo-dim)",
+          padding: "1px 7px", borderRadius: 10, fontWeight: 600,
+        }}>
+          {cards.length}
+        </span>
+        <span style={{ flex: 1, height: 1, background: "var(--border)", marginLeft: 4 }} />
+      </div>
+
+      <div style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fill, minmax(270px, 1fr))" }}>
+        {cards.map((card) => (
+          <ProjectCard key={card.id} card={card} health={health} now={now} iosStage={card.lane} />
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -876,10 +951,13 @@ function DraggableCard({
 
 // --- project card ------------------------------------------------------------
 
-function ProjectCard({ card, health, now }: {
+function ProjectCard({ card, health, now, iosStage }: {
   card: Card;
   health: HealthMap;
   now: number;
+  /** When set, renders a release-stage pill instead of a live/down health badge
+   *  (iOS apps aren't health-pinged). */
+  iosStage?: Lane;
 }) {
   const h = health[card.id];
   const isOnline = h?.state === "online";
@@ -908,7 +986,7 @@ function ProjectCard({ card, health, now }: {
           </div>
         </div>
 
-        {/* Health badge */}
+        {/* Health badge — or, for iOS apps, a release-stage pill */}
         {h ? (
           <span style={{
             flexShrink: 0, fontSize: 10, fontWeight: 600,
@@ -921,6 +999,17 @@ function ProjectCard({ card, health, now }: {
             title={h.ms != null ? `${h.ms}ms` : undefined}
           >
             {isOnline ? "● live" : "○ down"}
+          </span>
+        ) : iosStage ? (
+          <span style={{
+            flexShrink: 0, fontSize: 10, fontWeight: 600,
+            padding: "2px 7px", borderRadius: 5,
+            background: "var(--surface-2)",
+            color: IOS_STAGE_COLOR[iosStage],
+            border: "1px solid var(--border)",
+            letterSpacing: "0.04em", whiteSpace: "nowrap",
+          }}>
+            {IOS_STAGE_LABEL[iosStage]}
           </span>
         ) : card.liveUrl ? (
           <span style={{ fontSize: 10, color: "var(--text-muted)", padding: "2px 0" }}>···</span>
