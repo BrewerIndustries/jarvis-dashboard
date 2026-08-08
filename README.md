@@ -77,6 +77,23 @@ and the health log. If the Jarvis core is unreachable, the locally-gathered card
 Lanes: `live` · `in_progress` · `mothballed`. The DEV board reads `status.dev`;
 the prod board reads `status.prod`.
 
+## Custom sections
+
+Each lane can be subdivided into your own named **sections** (e.g. a "Games" group
+inside Live). Sections are created and managed from the UI:
+
+- **+ Section** on a lane header adds a section to that lane; click a section's name
+  (or the ✎) to rename, ✕ to delete (its cards fall back to *Ungrouped*).
+- Move a card into a section by **dragging** it onto the section, or via the card's
+  **⋯ → Move to…** menu (which also offers *New section* and *Remove from section*).
+
+Sections live in the same layout-prefs overlay as manual card order and collapsed
+lanes (`sectionOf` maps card id → section) — persisted server-side in `data/prefs.json`
+via `/api/prefs`, so they follow you across devices and **survive the cron registry
+sync**. A card always keeps its registry-driven lane; a section only sub-groups within
+that lane. Sections show only in **Manual** sort with no active filter (other sorts
+reorder globally, and filtering flattens the view). *Reset layout* clears them.
+
 ## Run locally
 
 ```bash

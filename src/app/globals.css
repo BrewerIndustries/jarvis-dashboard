@@ -109,6 +109,69 @@ body.reordering { cursor: grabbing; }
 .lane-chevron { transition: transform 0.15s ease; flex-shrink: 0; }
 .lane-toggle[data-collapsed="true"] .lane-chevron { transform: rotate(-90deg); }
 
+/* Custom sections within a lane -------------------------------------------- */
+.section-subhead {
+  display: flex; align-items: center; gap: 8px;
+  margin: 0 0 9px; padding-left: 2px;
+  min-height: 20px;
+}
+/* A section's drop zone: keeps a little height so an empty section is a target. */
+.section-zone { min-height: 8px; }
+.zone-empty {
+  grid-column: 1 / -1;
+  border: 1px dashed var(--border-mid); border-radius: 8px;
+  padding: 14px; text-align: center;
+  font-size: 11px; color: var(--text-muted); letter-spacing: 0.04em;
+}
+/* Section header controls: name (click to rename), rename/delete, and "+ Section". */
+.section-name-btn {
+  background: transparent; border: none; color: var(--text); font: inherit;
+  font-size: 10.5px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  cursor: text; padding: 0; white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis; max-width: 40vw;
+}
+.section-name-btn:hover { color: var(--indigo-bright); }
+.section-input {
+  background: var(--surface); border: 1px solid var(--border-mid); border-radius: 6px;
+  color: var(--text); font: inherit; font-size: 11px; padding: 3px 8px; outline: none;
+  letter-spacing: 0.06em; min-width: 140px;
+}
+.sec-add, .sec-act {
+  background: transparent; border: 1px solid var(--border); border-radius: 6px;
+  color: var(--text-dim); cursor: pointer; font: inherit; font-size: 11px;
+  padding: 4px 10px; letter-spacing: 0.04em; flex-shrink: 0;
+  transition: color 0.15s, border-color 0.15s;
+}
+.sec-act { padding: 2px 6px; border-color: transparent; opacity: 0.55; }
+.sec-add:hover { color: var(--text); border-color: var(--border-mid); }
+.sec-act:hover { color: var(--text); opacity: 1; }
+
+/* Per-card "move to section" menu ------------------------------------------ */
+.card-menu-btn {
+  background: transparent; border: none; color: var(--text-muted); cursor: pointer;
+  font-size: 15px; line-height: 1; padding: 0 3px; border-radius: 4px; flex-shrink: 0;
+  transition: color 0.15s;
+}
+.card-menu-btn:hover { color: var(--text); }
+.card-menu {
+  min-width: 172px; max-width: 240px;
+  background: var(--surface-2); border: 1px solid var(--border-mid);
+  border-radius: 8px; padding: 5px; margin-top: 4px;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.5);
+  display: flex; flex-direction: column; gap: 1px;
+}
+.card-menu-label {
+  font-size: 9px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--text-muted); padding: 4px 8px 3px;
+}
+.card-menu-item {
+  text-align: left; background: transparent; border: none; border-radius: 5px;
+  color: var(--text-dim); font: inherit; font-size: 11.5px; padding: 6px 8px; cursor: pointer;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: 0.02em;
+}
+.card-menu-item:hover { background: var(--surface-3); color: var(--text); }
+.card-menu-empty { font-size: 11px; color: var(--text-muted); padding: 4px 8px; }
+
 /* Log area monospace */
 .log-mono {
   font-family: "Cascadia Code", "JetBrains Mono", "IBM Plex Mono", Consolas, monospace;

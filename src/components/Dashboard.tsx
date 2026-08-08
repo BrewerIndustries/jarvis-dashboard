@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
 import type { Lane } from "@/lib/registry";
-import { DEFAULT_PREFS, SORT_LABEL, SORT_MODES, type Prefs, type SortMode } from "@/lib/prefs";
+import { DEFAULT_PREFS, SORT_LABEL, SORT_MODES, type Prefs, type Section, type SortMode } from "@/lib/prefs";
 import { applyPalette, computePalette } from "@/lib/ambientTheme";
 
 // --- types -------------------------------------------------------------------
@@ -145,6 +145,33 @@ const ENV_URLS: Record<string, { label: string; url: string }> = {
   prod: { label: "→ Dev",  url: "http://100.102.159.57:4510" },
 };
 
+// Sentinel for the drop zone that holds a lane's cards not in any section.
+const UNGROUPED = "__ungrouped__";
+
+// A short, stable id for a freshly created section.
+function newSectionId(): string {
+  try {
+    const uuid = globalThis.crypto?.randomUUID?.();
+    if (uuid) return `sec_${uuid.slice(0, 8)}`;
+  } catch { /* no crypto → fall through */ }
+  return `sec_${Math.random().toString(36).slice(2, 10)}`;
+}
+
+// A card's validated section within a lane: the assigned section, but only if it
+// still exists among that lane's sections.
+function pickLaneAssignments(
+  sectionOf: Record<string, string>,
+  cards: { id: string }[],
+  sectionIds: Set<string>,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const c of cards) {
+    const s = sectionOf[c.id];
+    if (s && sectionIds.has(s)) out[c.id] = s;
+  }
+  return out;
+}
+
 // --- main --------------------------------------------------------------------
 
 function useAmbientTheme() {
@@ -191,15 +218,51 @@ export default function Dashboard({ env }: { env?: string | null }) {
 
   const toggleCollapse = (lane: Lane) =>
     persist({ ...prefs, collapsed: { ...prefs.collapsed, [lane]: !prefs.collapsed[lane] } });
-  const reorderLane = (lane: Lane, ids: string[]) =>
-    persist({ ...prefs, order: { ...prefs.order, [lane]: ids } });
   const setSort = (sort: SortMode) => persist({ ...prefs, sort });
   const setAllCollapsed = (collapsed: boolean) =>
     persist({ ...prefs, collapsed: Object.fromEntries(LANE_ORDER.map((l) => [l, collapsed])) });
   const resetLayout = () => persist(DEFAULT_PREFS);
 
+  // Commit a drag: the lane's new card order plus any changed section assignments
+  // (cardId → sectionId, or null to move back to ungrouped) in a single write.
+  const commitDrag = (lane: Lane, ids: string[], assignments: Record<string, string | null>) => {
+    const sectionOf = { ...prefs.sectionOf };
+    for (const [cardId, sec] of Object.entries(assignments)) {
+      if (sec) sectionOf[cardId] = sec;
+      else delete sectionOf[cardId];
+    }
+    persist({ ...prefs, order: { ...prefs.order, [lane]: ids }, sectionOf });
+  };
+
+  const createSection = (lane: Lane, name: string) =>
+    persist({ ...prefs, sections: [...prefs.sections, { id: newSectionId(), lane, name: name.trim() || "New section" }] });
+  const renameSection = (id: string, name: string) =>
+    persist({ ...prefs, sections: prefs.sections.map((s) => (s.id === id ? { ...s, name: name.trim() || s.name } : s)) });
+  const deleteSection = (id: string) => {
+    const sectionOf = { ...prefs.sectionOf };
+    for (const cardId of Object.keys(sectionOf)) if (sectionOf[cardId] === id) delete sectionOf[cardId];
+    persist({ ...prefs, sections: prefs.sections.filter((s) => s.id !== id), sectionOf });
+  };
+  const moveCard = (cardId: string, target: string | null) => {
+    const sectionOf = { ...prefs.sectionOf };
+    if (target) sectionOf[cardId] = target;
+    else delete sectionOf[cardId];
+    persist({ ...prefs, sectionOf });
+  };
+  // "Move to → New section" from a card's menu: create the section and drop the
+  // card into it in one write, so the new section is never momentarily empty.
+  const moveCardToNewSection = (lane: Lane, cardId: string) => {
+    const id = newSectionId();
+    persist({
+      ...prefs,
+      sections: [...prefs.sections, { id, lane, name: "New section" }],
+      sectionOf: { ...prefs.sectionOf, [cardId]: id },
+    });
+  };
+
   const hasCustomLayout =
     prefs.sort !== "custom" ||
+    prefs.sections.length > 0 ||
     LANE_ORDER.some((l) => (prefs.order[l]?.length ?? 0) > 0 || prefs.collapsed[l]);
   const allCollapsed = LANE_ORDER.every((l) => prefs.collapsed[l]);
 
@@ -233,6 +296,9 @@ export default function Dashboard({ env }: { env?: string | null }) {
 
   const q = filter.trim().toLowerCase();
   const filtering = q.length > 0;
+  // Custom sections (and drag) apply only in manual sort with no active filter —
+  // other sorts reorder globally, and filtering flattens the view.
+  const sectionsEnabled = prefs.sort === "custom" && !filtering;
   const filtered = filtering
     ? cards.filter((c) =>
         c.name.toLowerCase().includes(q) || (c.description ?? "").toLowerCase().includes(q))
@@ -303,10 +369,17 @@ export default function Dashboard({ env }: { env?: string | null }) {
                   key={lane}
                   lane={lane}
                   cards={laneCards(byLane[lane], prefs.sort, prefs.order[lane])}
+                  sections={sectionsEnabled ? prefs.sections.filter((s) => s.lane === lane) : []}
+                  sectionOf={prefs.sectionOf}
                   collapsed={filtering ? false : !!prefs.collapsed[lane]}
-                  draggable={prefs.sort === "custom" && !filtering}
+                  draggable={sectionsEnabled}
                   onToggleCollapse={() => toggleCollapse(lane)}
-                  onReorder={(ids) => reorderLane(lane, ids)}
+                  onCommitDrag={(ids, assignments) => commitDrag(lane, ids, assignments)}
+                  onCreateSection={(name) => createSection(lane, name)}
+                  onRenameSection={renameSection}
+                  onDeleteSection={deleteSection}
+                  onMoveCard={moveCard}
+                  onMoveCardToNewSection={(cardId) => moveCardToNewSection(lane, cardId)}
                   health={health}
                   now={now}
                 />
@@ -642,29 +715,59 @@ function IOSAppsSection({ cards, health, now }: {
 
 // --- lane section ------------------------------------------------------------
 
-function LaneSection({ lane, cards, collapsed, draggable, onToggleCollapse, onReorder, health, now }: {
+const GRID_STYLE: CSSProperties = {
+  display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fill, minmax(270px, 1fr))",
+};
+
+// Props threaded to each draggable card so it can offer a "Move to section" menu.
+interface MoveMenu {
+  sections: Section[];
+  currentSectionId: string | null;
+  onMove: (target: string | null) => void;
+  onMoveNew: () => void;
+}
+
+function LaneSection({
+  lane, cards, sections, sectionOf, collapsed, draggable,
+  onToggleCollapse, onCommitDrag, onCreateSection, onRenameSection, onDeleteSection,
+  onMoveCard, onMoveCardToNewSection, health, now,
+}: {
   lane: Lane;
   cards: Card[];
+  sections: Section[];
+  sectionOf: Record<string, string>;
   collapsed: boolean;
   draggable: boolean;
   onToggleCollapse: () => void;
-  onReorder: (ids: string[]) => void;
+  onCommitDrag: (ids: string[], assignments: Record<string, string | null>) => void;
+  onCreateSection: (name: string) => void;
+  onRenameSection: (id: string, name: string) => void;
+  onDeleteSection: (id: string) => void;
+  onMoveCard: (cardId: string, target: string | null) => void;
+  onMoveCardToNewSection: (cardId: string) => void;
   health: HealthMap;
   now: number;
 }) {
-  // Local id order drives rendering so a drag reorders instantly; it re-syncs from
-  // props (the persisted order) whenever a drag isn't in progress.
+  const sectionIds = new Set(sections.map((s) => s.id));
+
+  // Local state drives rendering so a drag reflects instantly; both re-sync from
+  // props (the persisted order + assignments) whenever a drag isn't in progress.
   const [localIds, setLocalIds] = useState<string[]>(() => cards.map((c) => c.id));
+  const [localSecOf, setLocalSecOf] = useState<Record<string, string>>(
+    () => pickLaneAssignments(sectionOf, cards, sectionIds),
+  );
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const [overId, setOverId] = useState<string | null>(null);
-  const idsRef = useRef(localIds);
-  idsRef.current = localIds;
+  const [adding, setAdding] = useState(false);
+
+  const idsRef = useRef(localIds); idsRef.current = localIds;
+  const secOfRef = useRef(localSecOf); secOfRef.current = localSecOf;
   const dragRef = useRef<string | null>(null); // active drag id (drives logic; state is for styling)
   const overRef = useRef<string | null>(null); // last card we reordered onto (dedupes re-entry)
 
   // Pointer-drag machinery. Mouse picks a card up on a small move; touch long-presses
   // to pick up, so a plain finger-swipe still scrolls the page.
-  const gridRef = useRef<HTMLDivElement>(null);
+  const laneRef = useRef<HTMLDivElement>(null); // wraps every section zone in the lane
   const activePointer = useRef<number | null>(null);
   const pressTimer = useRef<number | null>(null);
   const startPt = useRef({ x: 0, y: 0 });
@@ -688,6 +791,11 @@ function LaneSection({ lane, cards, collapsed, draggable, onToggleCollapse, onRe
   useEffect(() => {
     if (!draggingId) setLocalIds(cards.map((c) => c.id));
   }, [cards, draggingId]);
+  useEffect(() => {
+    if (!draggingId) setLocalSecOf(pickLaneAssignments(sectionOf, cards, sectionIds));
+    // sectionIds is derived from sections; depending on sectionOf+cards+sections covers it.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sectionOf, cards, sections, draggingId]);
 
   // If the lane unmounts mid-gesture, drop any window listeners / timers.
   useEffect(() => () => teardownDrag(), []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -697,6 +805,21 @@ function LaneSection({ lane, cards, collapsed, draggable, onToggleCollapse, onRe
   const byId = new Map(cards.map((c) => [c.id, c]));
   const ordered = localIds.map((id) => byId.get(id)).filter(Boolean) as Card[];
   const ghostCard = draggingId ? byId.get(draggingId) : undefined;
+
+  // A card's live (optimistic) section, validated against the lane's sections.
+  const secOf = (id: string): string | null => {
+    const s = localSecOf[id];
+    return s && sectionIds.has(s) ? s : null;
+  };
+
+  // Partition the lane's ordered cards into their sections + an ungrouped bucket.
+  const grouped: Record<string, Card[]> = {};
+  sections.forEach((s) => { grouped[s.id] = []; });
+  const ungrouped: Card[] = [];
+  for (const c of ordered) {
+    const s = secOf(c.id);
+    if (s) grouped[s].push(c); else ungrouped.push(c);
+  }
 
   function startDrag(id: string) {
     dragRef.current = id;
@@ -713,28 +836,47 @@ function LaneSection({ lane, cards, collapsed, draggable, onToggleCollapse, onRe
     window.addEventListener("touchmove", pt, { passive: false });
   }
 
-  // Move the dragged card to the target's slot — but only when the pointer crosses
-  // onto a *new* card, so hovering within one card can't oscillate the order.
+  // Move the dragged card next to a target card in the flat order — but only when
+  // the pointer crosses onto a *new* card, so hovering within one can't oscillate it.
+  // Updates idsRef imperatively (not just via state) so the commit in endDrag reads
+  // the final order even if no re-render lands between the last move and pointerup.
   function moveOver(targetId: string) {
     const dragId = dragRef.current;
     if (!dragId || dragId === targetId || overRef.current === targetId) return;
+    const cur = [...idsRef.current];
+    const fi = cur.indexOf(dragId);
+    const ti = cur.indexOf(targetId);
+    if (fi < 0 || ti < 0) return;
+    cur.splice(ti, 0, cur.splice(fi, 1)[0]);
     overRef.current = targetId;
+    idsRef.current = cur;
     setOverId(targetId);
-    setLocalIds((prev) => {
-      const cur = [...prev];
-      const fi = cur.indexOf(dragId);
-      const ti = cur.indexOf(targetId);
-      if (fi < 0 || ti < 0) return prev;
-      cur.splice(ti, 0, cur.splice(fi, 1)[0]);
-      return cur;
-    });
+    setLocalIds(cur);
   }
 
-  // Which card in *this* lane is under the pointer — by geometry, so it doesn't
-  // depend on z-order/pointer-events. Returns the containing card, else the nearest.
-  function cardAt(x: number, y: number): string | null {
-    const els = gridRef.current?.querySelectorAll<HTMLElement>("[data-card-id]");
-    if (!els) return null;
+  // Which section zone is under the pointer — the containing zone, else the nearest.
+  // Returns its section id (or null for the ungrouped zone).
+  function zoneAt(x: number, y: number): { el: HTMLElement; sectionId: string | null } | null {
+    const els = laneRef.current?.querySelectorAll<HTMLElement>("[data-section-zone]");
+    if (!els || els.length === 0) return null;
+    let best: HTMLElement | null = null;
+    let bestDist = Infinity;
+    for (const el of els) {
+      const r = el.getBoundingClientRect();
+      if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) { best = el; break; }
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      const d = Math.hypot(x - cx, y - cy);
+      if (d < bestDist) { bestDist = d; best = el; }
+    }
+    if (!best) return null;
+    const raw = best.getAttribute("data-section-zone");
+    return { el: best, sectionId: raw && raw !== UNGROUPED ? raw : null };
+  }
+
+  // Nearest card within a given zone (containing card, else nearest; null if empty).
+  function cardInZone(zoneEl: HTMLElement, x: number, y: number): string | null {
+    const els = zoneEl.querySelectorAll<HTMLElement>("[data-card-id]");
     let best: string | null = null;
     let bestDist = Infinity;
     for (const el of els) {
@@ -747,6 +889,27 @@ function LaneSection({ lane, cards, collapsed, draggable, onToggleCollapse, onRe
       if (d < bestDist) { bestDist = d; best = id; }
     }
     return best;
+  }
+
+  // On each pointer move: adopt the section under the pointer, then reorder next to
+  // the nearest card in that same zone.
+  function dragTo(x: number, y: number) {
+    const zone = zoneAt(x, y);
+    if (!zone) return;
+    const dragId = dragRef.current;
+    if (!dragId) return;
+    const cur = secOfRef.current[dragId] ?? null;
+    if (cur !== zone.sectionId) {
+      // Update the ref imperatively as well as via state, so endDrag commits the
+      // final section even without a re-render between this move and pointerup.
+      const next = { ...secOfRef.current };
+      if (zone.sectionId) next[dragId] = zone.sectionId;
+      else delete next[dragId];
+      secOfRef.current = next;
+      setLocalSecOf(next);
+    }
+    const tid = cardInZone(zone.el, x, y);
+    if (tid) moveOver(tid);
   }
 
   // Scroll the page when a drag hovers near the top/bottom edge (for long lists on
@@ -791,7 +954,13 @@ function LaneSection({ lane, cards, collapsed, draggable, onToggleCollapse, onRe
     if (wasDragging) {
       setDraggingId(null);
       setOverId(null);
-      onReorder(idsRef.current);
+      // Commit the new order + every lane card's (possibly changed) section in one write.
+      const assignments: Record<string, string | null> = {};
+      for (const c of cards) {
+        const s = secOfRef.current[c.id];
+        assignments[c.id] = s && sectionIds.has(s) ? s : null;
+      }
+      onCommitDrag(idsRef.current, assignments);
     }
   }
 
@@ -825,8 +994,7 @@ function LaneSection({ lane, cards, collapsed, draggable, onToggleCollapse, onRe
       }
       ev.preventDefault();
       positionGhost();
-      const tid = cardAt(ev.clientX, ev.clientY);
-      if (tid) moveOver(tid);
+      dragTo(ev.clientX, ev.clientY);
       edgeAutoScroll(ev.clientY);
     };
     const up = (ev: PointerEvent) => {
@@ -844,56 +1012,118 @@ function LaneSection({ lane, cards, collapsed, draggable, onToggleCollapse, onRe
     }
   }
 
+  const renderCard = (card: Card) =>
+    draggable ? (
+      <DraggableCard
+        key={card.id}
+        card={card}
+        health={health}
+        now={now}
+        dragging={draggingId === card.id}
+        dropTarget={overId === card.id && draggingId !== card.id}
+        onPointerDown={(e) => onCardPointerDown(e, card.id)}
+        move={{
+          sections,
+          currentSectionId: secOf(card.id),
+          onMove: (target) => onMoveCard(card.id, target),
+          onMoveNew: () => onMoveCardToNewSection(card.id),
+        }}
+      />
+    ) : (
+      <ProjectCard key={card.id} card={card} health={health} now={now} />
+    );
+
   return (
     <section>
-      <button
-        className="lane-toggle"
-        data-collapsed={collapsed}
-        onClick={onToggleCollapse}
-        aria-expanded={!collapsed}
-      >
-        <span className="lane-chevron" style={{ fontSize: 9, color: LANE_COLOR[lane], width: 8 }}>▾</span>
-        <span style={{
-          display: "inline-block",
-          width: 7, height: 7, borderRadius: "50%",
-          background: LANE_COLOR[lane],
-          boxShadow: `0 0 6px ${LANE_COLOR[lane]}`,
-          flexShrink: 0,
-        }} />
-        <span style={{
-          fontSize: 11, fontWeight: 700,
-          letterSpacing: "0.12em", textTransform: "uppercase",
-          color: LANE_COLOR[lane],
-        }}>
-          {LANE_LABEL[lane]}
-        </span>
-        <span style={{
-          fontSize: 10, color: "var(--text-muted)",
-          background: LANE_DOT_BG[lane],
-          padding: "1px 7px", borderRadius: 10,
-          fontWeight: 600,
-        }}>
-          {cards.length}
-        </span>
-        <span style={{ flex: 1, height: 1, background: "var(--border)", marginLeft: 4 }} />
-      </button>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+        <button
+          className="lane-toggle"
+          data-collapsed={collapsed}
+          onClick={onToggleCollapse}
+          aria-expanded={!collapsed}
+          style={{ marginBottom: 0, flex: 1 }}
+        >
+          <span className="lane-chevron" style={{ fontSize: 9, color: LANE_COLOR[lane], width: 8 }}>▾</span>
+          <span style={{
+            display: "inline-block",
+            width: 7, height: 7, borderRadius: "50%",
+            background: LANE_COLOR[lane],
+            boxShadow: `0 0 6px ${LANE_COLOR[lane]}`,
+            flexShrink: 0,
+          }} />
+          <span style={{
+            fontSize: 11, fontWeight: 700,
+            letterSpacing: "0.12em", textTransform: "uppercase",
+            color: LANE_COLOR[lane],
+          }}>
+            {LANE_LABEL[lane]}
+          </span>
+          <span style={{
+            fontSize: 10, color: "var(--text-muted)",
+            background: LANE_DOT_BG[lane],
+            padding: "1px 7px", borderRadius: 10,
+            fontWeight: 600,
+          }}>
+            {cards.length}
+          </span>
+          <span style={{ flex: 1, height: 1, background: "var(--border)", marginLeft: 4 }} />
+        </button>
+
+        {draggable && !collapsed && (
+          <AddSection
+            adding={adding}
+            setAdding={setAdding}
+            onCreate={(name) => { onCreateSection(name); setAdding(false); }}
+          />
+        )}
+      </div>
 
       {!collapsed && (
-        <div ref={gridRef} style={{ display: "grid", gap: 10, gridTemplateColumns: "repeat(auto-fill, minmax(270px, 1fr))" }}>
-          {ordered.map((card) =>
-            draggable ? (
-              <DraggableCard
-                key={card.id}
-                card={card}
-                health={health}
-                now={now}
-                dragging={draggingId === card.id}
-                dropTarget={overId === card.id && draggingId !== card.id}
-                onPointerDown={(e) => onCardPointerDown(e, card.id)}
-              />
-            ) : (
-              <ProjectCard key={card.id} card={card} health={health} now={now} />
-            ),
+        <div ref={laneRef} style={{ display: "flex", flexDirection: "column", gap: 18 }}>
+          {sections.length === 0 ? (
+            // No custom sections → one flat grid (identical to the classic view).
+            <div data-section-zone={UNGROUPED} style={GRID_STYLE}>
+              {ordered.map(renderCard)}
+            </div>
+          ) : (
+            <>
+              {sections.map((s) => (
+                <div key={s.id}>
+                  <SectionHeader
+                    section={s}
+                    count={grouped[s.id].length}
+                    color={LANE_COLOR[lane]}
+                    onRename={(name) => onRenameSection(s.id, name)}
+                    onDelete={() => {
+                      const n = grouped[s.id].length;
+                      if (n > 0 && !window.confirm(`Delete section “${s.name || "Untitled"}”? Its ${n} card${n === 1 ? "" : "s"} move back to Ungrouped.`)) return;
+                      onDeleteSection(s.id);
+                    }}
+                  />
+                  <div data-section-zone={s.id} className="section-zone" style={GRID_STYLE}>
+                    {grouped[s.id].map(renderCard)}
+                    {grouped[s.id].length === 0 && <div className="zone-empty">Drop cards here</div>}
+                  </div>
+                </div>
+              ))}
+
+              {(ungrouped.length > 0 || draggingId != null) && (
+                <div>
+                  {ungrouped.length > 0 && (
+                    <div className="section-subhead">
+                      <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: "0.12em", textTransform: "uppercase", color: "var(--text-muted)" }}>
+                        Ungrouped
+                      </span>
+                      <span style={{ flex: 1, height: 1, background: "var(--border)" }} />
+                    </div>
+                  )}
+                  <div data-section-zone={UNGROUPED} className="section-zone" style={GRID_STYLE}>
+                    {ungrouped.map(renderCard)}
+                    {ungrouped.length === 0 && <div className="zone-empty">Drop here to remove from a section</div>}
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}
@@ -923,12 +1153,12 @@ function LaneSection({ lane, cards, collapsed, draggable, onToggleCollapse, onRe
 }
 
 // A ProjectCard made draggable via Pointer Events (works for mouse, touch and pen)
-// for manual reordering. The whole card is the handle; the drag controller in
-// LaneSection ignores grabs that begin on the action links so those stay tappable.
-// `touch-action: pan-y` lets a plain vertical swipe scroll the page normally — the
-// controller only takes over once a touch has long-pressed to pick the card up.
+// for manual reordering + moving between sections. The whole card is the handle;
+// the drag controller in LaneSection ignores grabs that begin on the action links
+// or the move-menu button so those stay tappable. `touch-action: pan-y` lets a plain
+// vertical swipe scroll the page — the controller only takes over after a long-press.
 function DraggableCard({
-  card, health, now, dragging, dropTarget, onPointerDown,
+  card, health, now, dragging, dropTarget, onPointerDown, move,
 }: {
   card: Card;
   health: HealthMap;
@@ -936,6 +1166,7 @@ function DraggableCard({
   dragging: boolean;
   dropTarget: boolean;
   onPointerDown: (e: React.PointerEvent) => void;
+  move?: MoveMenu;
 }) {
   return (
     <div
@@ -944,20 +1175,157 @@ function DraggableCard({
       onPointerDown={onPointerDown}
       style={{ cursor: "grab", touchAction: "pan-y" }}
     >
-      <ProjectCard card={card} health={health} now={now} />
+      <ProjectCard card={card} health={health} now={now} move={move} />
+    </div>
+  );
+}
+
+// --- section header + add control --------------------------------------------
+
+function SectionHeader({ section, count, color, onRename, onDelete }: {
+  section: Section;
+  count: number;
+  color: string;
+  onRename: (name: string) => void;
+  onDelete: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState(section.name);
+  useEffect(() => { setText(section.name); }, [section.name]);
+
+  const commit = () => {
+    setEditing(false);
+    const t = text.trim();
+    if (t && t !== section.name) onRename(t);
+    else setText(section.name);
+  };
+
+  return (
+    <div className="section-subhead">
+      <span style={{
+        display: "inline-block", width: 6, height: 6, borderRadius: "50%",
+        background: color, opacity: 0.75, flexShrink: 0,
+      }} />
+      {editing ? (
+        <input
+          className="section-input"
+          autoFocus
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onBlur={commit}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") commit();
+            else if (e.key === "Escape") { setText(section.name); setEditing(false); }
+          }}
+          aria-label="Section name"
+        />
+      ) : (
+        <button className="section-name-btn" title="Rename section" onClick={() => setEditing(true)}>
+          {section.name || "Untitled"}
+        </button>
+      )}
+      <span style={{
+        fontSize: 10, color: "var(--text-muted)", background: "rgba(255,255,255,0.05)",
+        padding: "1px 7px", borderRadius: 10, fontWeight: 600, flexShrink: 0,
+      }}>
+        {count}
+      </span>
+      <span style={{ flex: 1, height: 1, background: "var(--border)" }} />
+      <button className="sec-act" title="Rename section" onClick={() => setEditing(true)}>✎</button>
+      <button className="sec-act" title="Delete section" onClick={onDelete}>✕</button>
+    </div>
+  );
+}
+
+function AddSection({ adding, setAdding, onCreate }: {
+  adding: boolean;
+  setAdding: (v: boolean) => void;
+  onCreate: (name: string) => void;
+}) {
+  const [text, setText] = useState("");
+  if (!adding) {
+    return <button className="sec-add" title="Add a section to this lane" onClick={() => setAdding(true)}>+ Section</button>;
+  }
+  const commit = () => {
+    const t = text.trim();
+    if (t) onCreate(t);
+    else setAdding(false);
+    setText("");
+  };
+  return (
+    <input
+      className="section-input"
+      autoFocus
+      value={text}
+      placeholder="Section name…"
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") commit();
+        else if (e.key === "Escape") { setText(""); setAdding(false); }
+      }}
+      aria-label="New section name"
+    />
+  );
+}
+
+// --- per-card move menu ------------------------------------------------------
+
+function SectionMenu({ sections, currentSectionId, onMove, onMoveNew }: MoveMenu) {
+  const [open, setOpen] = useState(false);
+  const others = sections.filter((s) => s.id !== currentSectionId);
+
+  const stop = (e: React.PointerEvent) => e.stopPropagation();
+
+  return (
+    <div style={{ position: "relative", flexShrink: 0 }} onPointerDown={stop}>
+      <button
+        className="card-menu-btn"
+        title="Move to section"
+        aria-label="Move to section"
+        onClick={(e) => { e.stopPropagation(); setOpen((o) => !o); }}
+      >
+        ⋯
+      </button>
+      {open && (
+        <>
+          <div
+            onPointerDown={stop}
+            onClick={() => setOpen(false)}
+            style={{ position: "fixed", inset: 0, zIndex: 80 }}
+          />
+          <div className="card-menu" onPointerDown={stop} style={{ position: "absolute", right: 0, top: "100%", zIndex: 81 }}>
+            <div className="card-menu-label">Move to…</div>
+            {others.map((s) => (
+              <button key={s.id} className="card-menu-item" onClick={() => { onMove(s.id); setOpen(false); }}>
+                {s.name || "Untitled"}
+              </button>
+            ))}
+            {others.length === 0 && sections.length > 0 && (
+              <div className="card-menu-empty">No other sections</div>
+            )}
+            <button className="card-menu-item" onClick={() => { onMoveNew(); setOpen(false); }}>+ New section</button>
+            {currentSectionId && (
+              <button className="card-menu-item" onClick={() => { onMove(null); setOpen(false); }}>Remove from section</button>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
 
 // --- project card ------------------------------------------------------------
 
-function ProjectCard({ card, health, now, iosStage }: {
+function ProjectCard({ card, health, now, iosStage, move }: {
   card: Card;
   health: HealthMap;
   now: number;
   /** When set, renders a release-stage pill instead of a live/down health badge
    *  (iOS apps aren't health-pinged). */
   iosStage?: Lane;
+  /** When set, renders a "move to section" menu in the top row. */
+  move?: MoveMenu;
 }) {
   const h = health[card.id];
   const isOnline = h?.state === "online";
@@ -1014,6 +1382,8 @@ function ProjectCard({ card, health, now, iosStage }: {
         ) : card.liveUrl ? (
           <span style={{ fontSize: 10, color: "var(--text-muted)", padding: "2px 0" }}>···</span>
         ) : null}
+
+        {move && <SectionMenu {...move} />}
       </div>
 
       {/* Description */}
