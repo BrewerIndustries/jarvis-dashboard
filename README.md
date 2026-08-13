@@ -3,6 +3,9 @@
 A personal project dashboard styled like a DOS TUI (Norton Commander / Turbo Pascal) —
 a live card grid of every Jarvis project, auto-populated and grouped by lifecycle lane.
 
+**How ideas, backlog, and projects flow across the constellation:** see [WORKFLOW.md](WORKFLOW.md)
+(Idea Log → Dashboard → `BACKLOG.md`; Baseliner is an optional formal layer, not the default).
+
 ## How it works
 
 Each project has a `.jarvis.json` at its repo root declaring its id, name, description,
