@@ -36,7 +36,7 @@ Dashboard — card grid: LIVE / IN PROGRESS / MOTHBALLED
 | last commit | latest commit on the synced branch                        |
 | backlog     | open `- [ ]` items in BACKLOG.md → README ## Backlog/TODO |
 | live URL    | `deploy[env].url` or derived from subdomain convention    |
-| health      | `/api/health` ping (any HTTP response = online)           |
+| health      | `/api/health` ping (any HTTP response = online; one retry, cached DNS) |
 
 ## Health tab
 
