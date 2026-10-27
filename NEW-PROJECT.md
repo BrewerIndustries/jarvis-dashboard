@@ -37,7 +37,18 @@ Drop a `.jarvis.json` at the repo root:
 }
 ```
 
-`status` lanes are `live` | `in_progress` | `mothballed`. A cron
+`status` lanes are `live` | `in_progress` | `mothballed`.
+
+A repo that also hosts a separately deployed app can add more cards with an
+`extra` array. Each entry takes the same fields (`id`, `name`, `description`,
+`category`, `status`, `deploy`, `subdomain`) and shares the repo's version and
+last commit. Line Watch in the Jarvis repo is the first:
+
+```json
+"extra": [{ "id": "linewatch", "name": "Line Watch", "category": "jarvis-tools",
+            "status": { "prod": "live", "dev": "live" },
+            "deploy": { "prod": { "port": 4880 } } }]
+``` A cron
 (`/opt/jarvis-dashboard*/deploy/sync-registry.sh`, every 15 min) reads every
 repo's `.jarvis.json` via the GitHub API — **dev branch → dev registry, main →
 prod registry** — and writes `registry.json` into the dashboard. That's

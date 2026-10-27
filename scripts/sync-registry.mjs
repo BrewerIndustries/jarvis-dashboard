@@ -255,6 +255,30 @@ async function main() {
     out.push(card);
     const date = lastCommit ? new Date(lastCommit).toISOString().slice(0, 10) : "????-??-??";
     console.log(`${decl ? "✓" : "·"} ${repo.padEnd(20)} ${card.name} · v${card.version ?? "?"} · ${card.status[ENV]} · backlog ${card.backlog} · ${date}`);
+
+    // `extra`: more cards from the same repo, for a separately deployed app that lives
+    // inside it (e.g. Line Watch in Jarvis). Each declares its own id/name/description/
+    // category/status/deploy/subdomain; version, last commit and repo links are shared.
+    // The backlog belongs to the main card, so extras show none.
+    for (const x of Array.isArray(decl?.extra) ? decl.extra : []) {
+      if (!x?.id) {
+        console.error(`! ${repo}: extra card without an id — skipping`);
+        continue;
+      }
+      const status = normalizeStatus(x.status);
+      out.push({
+        ...card,
+        id: x.id,
+        name: x.name || x.id,
+        description: x.description || "",
+        category: x.category || card.category,
+        status,
+        backlog: 0,
+        liveUrl: liveUrl(x),
+        deploy: x.deploy ?? null,
+      });
+      console.log(`  + ${x.id.padEnd(18)} ${x.name || x.id} · ${status[ENV]} (extra card from ${repo})`);
+    }
   }
   for (const path of OUT) {
     mkdirSync(dirname(path), { recursive: true });
